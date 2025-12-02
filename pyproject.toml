@@ -1,0 +1,21 @@
+[project]
+name = "audiocapeval"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = "==3.10.0"
+dependencies = [
+    "pandas>=2.3.3",
+    "torch>=2.6.0",
+    "torchaudio==2.6.0",
+    "wandb>=0.23.0",
+]
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu118" }]
+torchaudio = [{ index = "pytorch-cu118" }]
+
+[[tool.uv.index]]
+name     = "pytorch-cu118"
+url      = "https://download.pytorch.org/whl/cu118"
+explicit = true
