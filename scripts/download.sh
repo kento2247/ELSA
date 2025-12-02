@@ -11,4 +11,5 @@ git clone git@github.com:sarulab-speech/RELATE.git
 aria2c -x10 -s10 -k1M https://zenodo.org/records/10737388/files/human_eval.zip?download=1
 unzip human_eval.zip
 rm human_eval.zip
+
 cd ..
