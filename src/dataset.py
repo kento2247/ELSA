@@ -46,7 +46,7 @@ class AudioCapDataset(Dataset):
                 self.data_dir,
                 "wav",
                 "audiocaps",
-                self.split,
+                self.split if self.split != "val" else "test",
                 f"{wavname.split('/')[-1]}",
             )
             if not os.path.exists(audio_file_path):
@@ -55,7 +55,7 @@ class AudioCapDataset(Dataset):
                 raise FileNotFoundError(f"Wav file not found: {ref_audio_file_path}")
             self.database.append(
                 {
-                    "dataset": "RELATE",
+                    "dataset": "relate",
                     "audio_file_path": audio_file_path,
                     "ref_audio_file_path": ref_audio_file_path,
                     "text": text,
@@ -87,9 +87,9 @@ class AudioCapDataset(Dataset):
             score: float = float(row["REL"])
             self.database.append(
                 {
-                    "dataset": "PAM_audio",
+                    "dataset": "pam_audio",
                     "audio_file_path": os.path.join(
-                        self.data_dir, "human_eval", "audio", model, file_name
+                        self.data_dir, "human_eval", "audio", model, f"{file_name}.wav"
                     ),
                     "text": text,
                     "score": score,
@@ -107,7 +107,7 @@ class AudioCapDataset(Dataset):
             score: float = float(row["REL"])
             self.database.append(
                 {
-                    "dataset": "PAM_music",
+                    "dataset": "pam_music",
                     "audio_file_path": os.path.join(
                         self.data_dir, "human_eval", "music", model, file_name
                     ),
