@@ -91,6 +91,7 @@ class AudioCapDataset(Dataset):
                     "audio_file_path": os.path.join(
                         self.data_dir, "human_eval", "audio", model, f"{file_name}.wav"
                     ),
+                    "ref_audio_file_path": "",
                     "text": text,
                     "score": score,
                 }
