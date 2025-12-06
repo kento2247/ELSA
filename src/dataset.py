@@ -52,7 +52,7 @@ class AudioCapDataset(Dataset):
             if not os.path.exists(audio_file_path):
                 raise FileNotFoundError(f"Wav file not found: {audio_file_path}")
             if not os.path.exists(ref_audio_file_path):
-                raise FileNotFoundError(f"Wav file not found: {ref_audio_file_path}")
+                ref_audio_file_path = ""
             self.database.append(
                 {
                     "dataset": "relate",
@@ -110,8 +110,9 @@ class AudioCapDataset(Dataset):
                 {
                     "dataset": "pam_music",
                     "audio_file_path": os.path.join(
-                        self.data_dir, "human_eval", "music", model, file_name
+                        self.data_dir, "human_eval", "music", model, f"{file_name}.wav"
                     ),
+                    "ref_audio_file_path": "",
                     "text": text,
                     "score": score,
                 }
@@ -145,7 +146,7 @@ class AudioCapDataset(Dataset):
         feat_path = os.path.join(feats_dir, dataset_name, file_name)
         if not os.path.exists(feat_path):
             raise FileNotFoundError(f"Feature file not found: {feat_path}")
-        feats = torch.load(feat_path)
+        feats = torch.load(feat_path, map_location="cpu")
         return feats
 
     def __getitem__(self, idx):
@@ -157,11 +158,17 @@ class AudioCapDataset(Dataset):
         file_name = os.path.basename(data["audio_file_path"]).replace(".wav", ".pt")
         dataset_name = data["dataset"]
 
-        data["audio_feats"] = self._load_pre_extracted_feats(
+        data["msclap_audio"] = self._load_pre_extracted_feats(
             feats_name="msclap_audio", dataset_name=dataset_name, file_name=file_name
         )
-        data["text_feats"] = self._load_pre_extracted_feats(
+        data["msclap_text"] = self._load_pre_extracted_feats(
             feats_name="msclap_text", dataset_name=dataset_name, file_name=file_name
+        )
+        data["laionclap_audio"] = self._load_pre_extracted_feats(
+            feats_name="laionclap_audio", dataset_name=dataset_name, file_name=file_name
+        )
+        data["laionclap_text"] = self._load_pre_extracted_feats(
+            feats_name="laionclap_text", dataset_name=dataset_name, file_name=file_name
         )
         return data
 

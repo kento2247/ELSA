@@ -13,3 +13,12 @@ unzip human_eval.zip
 rm human_eval.zip
 
 cd ..
+
+
+mkdir -p models
+cd models
+
+# Download pre-trained model
+aria2c -x10 -s10 -k1M -o 630k-audioset-best.pt https://huggingface.co/lukewys/laion_clap/resolve/main/630k-audioset-best.pt?download=true
+
+cd ..

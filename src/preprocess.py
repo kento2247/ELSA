@@ -1,6 +1,7 @@
 import argparse
 import os
 
+import laion_clap
 import torch
 import torchaudio
 from msclap import CLAP
@@ -21,18 +22,47 @@ class AudioCapPreprocessDataset(AudioCapDataset):
 class MSClapEmbedder:
     def __init__(self):
         self.model = CLAP(version="2023", use_cuda=True)
+        self.max_text_len = 77  # MSCLAPのテキスト最大長
 
     def embed_texts(self, texts: list[str]) -> torch.Tensor:
-        """Embed a batch of texts."""
+        """テキストをバッチで埋め込む"""
+        truncated_texts = [t[: self.max_text_len] for t in texts]
         with torch.no_grad():
-            text_embeddings = self.model.get_text_embeddings(class_labels=texts)
+            text_embeddings = self.model.get_text_embeddings(truncated_texts)
         return text_embeddings
 
     def embed_audios(self, audio_files: list[str]) -> torch.Tensor:
-        """Embed a batch of audios."""
+        """オーディオをバッチで埋め込む"""
         with torch.no_grad():
-            audio_embeddings = self.model.get_audio_embeddings(audio_files=audio_files)
+            audio_embeddings = self.model.get_audio_embeddings(audio_files)
         return audio_embeddings
+
+
+class LaionClapEmbedder:
+    def __init__(self):
+        self.model = laion_clap.CLAP_Module(enable_fusion=False)
+        self.model.load_ckpt("models/630k-audioset-best.pt")
+        self.max_text_len = 77  # LaionCLAPのテキスト最大長
+
+    def embed_texts(self, texts: list[str]) -> torch.Tensor:
+        """テキストをバッチで埋め込む（長いテキストはトランケート）"""
+        truncated_texts = [t[: self.max_text_len] for t in texts]
+        with torch.no_grad():
+            text_embeddings = self.model.get_text_embedding(
+                truncated_texts, use_tensor=True
+            )
+        return text_embeddings
+
+    def embed_audios(self, audio_files: list[str]) -> torch.Tensor:
+        """オーディオをバッチで埋め込む"""
+        with torch.no_grad():
+            audio_embeddings = self.model.get_audio_embedding_from_filelist(
+                x=audio_files, use_tensor=True
+            )
+        return audio_embeddings
+
+
+### feature saving functions ###
 
 
 def save_feats(
@@ -52,33 +82,84 @@ def save_feats(
 def save_batch_feats(
     feats_dir: str,
     datasets: list[str],
+    feats_name: str,
     audio_file_paths: list[str],
-    audio_embs: torch.Tensor,
-    text_embs: torch.Tensor,
+    feats: torch.Tensor,
 ):
     """
-    Save batched audio/text embeddings.
-    audio_embs: (B, D)
-    text_embs:  (B, D)
+    Save a batch of features to disk.
+    Args:
+        feats_dir: Directory to save features.
+        datasets: List of dataset names corresponding to each audio file.
+        feats_name: Name of the feature type (e.g., "msclap_audio"
+        audio_file_paths: List of audio file paths.
+        feats: Tensor of features [B, D].
+    Returns:
+        None
     """
     for i in range(len(audio_file_paths)):
-        dataset = datasets[i]
-        audio_file_path = audio_file_paths[i]
-        audio_feat = audio_embs[i]
-        text_feat = text_embs[i]
         save_feats(
             feats_dir=feats_dir,
-            feats_name="msclap_audio",
-            dataset=dataset,
-            audio_file_path=audio_file_path,
-            feats=audio_feat,
+            feats_name=feats_name,
+            dataset=datasets[i],
+            audio_file_path=audio_file_paths[i],
+            feats=feats[i],
         )
-        save_feats(
-            feats_dir=feats_dir,
-            feats_name="msclap_text",
-            dataset=dataset,
-            audio_file_path=audio_file_path,
-            feats=text_feat,
+
+
+### feature extraction main ###
+
+
+def msclap_extract(dataloader, feats_dir: str):
+    msclap_embedder = MSClapEmbedder()
+
+    for batch in tqdm(dataloader, desc="Extracting MSCLAP features"):
+        audio_files = batch["audio_file_path"]
+        texts = batch["text"]
+        datasets = batch["dataset"]
+
+        msclap_audio_embeddings = msclap_embedder.embed_audios(audio_files)
+        msclap_text_embeddings = msclap_embedder.embed_texts(texts)
+
+        save_batch_feats(
+            feats_dir,
+            datasets,
+            "msclap_audio",
+            audio_files,
+            msclap_audio_embeddings,
+        )
+        save_batch_feats(
+            feats_dir,
+            datasets,
+            "msclap_text",
+            audio_files,
+            msclap_text_embeddings,
+        )
+
+
+def laionclap_extract(dataloader, feats_dir: str):
+    laion_clap_embedder = LaionClapEmbedder()
+    for batch in tqdm(dataloader, desc="Extracting LaionCLAP features"):
+        audio_files = batch["audio_file_path"]
+        texts = batch["text"]
+        datasets = batch["dataset"]
+
+        laion_audio_embeddings = laion_clap_embedder.embed_audios(audio_files)
+        laion_text_embeddings = laion_clap_embedder.embed_texts(texts)
+
+        save_batch_feats(
+            feats_dir,
+            datasets,
+            "laionclap_audio",
+            audio_files,
+            laion_audio_embeddings,
+        )
+        save_batch_feats(
+            feats_dir,
+            datasets,
+            "laionclap_text",
+            audio_files,
+            laion_text_embeddings,
         )
 
 
@@ -86,22 +167,11 @@ def main(args):
     dataset = AudioCapPreprocessDataset(data_dir=args.data_dir, split=args.split)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=args.bs, shuffle=True)
 
-    msclap_embedder = MSClapEmbedder()
+    msclap_extract(dataloader, args.feats_dir)
+    laionclap_extract(dataloader, args.feats_dir)
 
-    for batch in tqdm(dataloader, desc="Preprocessing"):
-        audio_files = batch["audio_file_path"]
-        texts = batch["text"]
-        datasets = batch["dataset"]
 
-        msclap_audio_embeddings = msclap_embedder.embed_audios(audio_files)
-        msclap_text_embeddings = msclap_embedder.embed_texts(texts)
-        save_batch_feats(
-            args.feats_dir,
-            datasets,
-            audio_files,
-            msclap_audio_embeddings,
-            msclap_text_embeddings,
-        )
+### argument parser ###
 
 
 def arg_parser():
