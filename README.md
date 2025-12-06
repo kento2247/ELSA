@@ -112,12 +112,33 @@ score,pred
 | Kendall's τ | ケンドールの順位相関係数 |
 
 ## 定量結果
-| モデル | MSE | Pearson | Spearman | Kendall's τ |
-|--------|-----|---------|----------|-------------|
+
+### ALL DATASETS
+| Model | MSE | Pearson | Spearman | Kendall τ |
+|-------|----:|--------:|---------:|-----------:|
 | [Microsoft CLAP](https://github.com/microsoft/CLAP) | 41.29 | 0.266 | 0.246 | 0.174 |
 | [Laion CLAP](https://github.com/LAION-AI/CLAP) | 42.10 | 0.316 | 0.299 | 0.210 |
 | Ours | XXX | XXX | XXX | XXX |
+### RELATE
+| Model | MSE | Pearson | Spearman | Kendall τ |
+|-------|----:|--------:|---------:|-----------:|
+| [Microsoft CLAP](https://github.com/microsoft/CLAP) | 49.5852 | 0.1119 | 0.1055 | 0.0759 |
+| [Laion CLAP](https://github.com/LAION-AI/CLAP)      | 50.3553 | 0.1282 | 0.1253 | 0.0901 |
+| **Ours**        | **XXX** | **XXX** | **XXX** | **XXX** |
 
+### PAM-Audio
+| Model | MSE | Pearson | Spearman | Kendall τ |
+|-------|----:|--------:|---------:|-----------:|
+| [Microsoft CLAP](https://github.com/microsoft/CLAP) | 9.2164 | 0.1338 | 0.1494 | 0.1025 |
+| [Laion CLAP](https://github.com/LAION-AI/CLAP)      | 10.0086 | 0.2137 | 0.2193 | 0.1491 |
+| **Ours**        | **XXX** | **XXX** | **XXX** | **XXX** |
+
+### PAM-Music
+| Model | MSE | Pearson | Spearman | Kendall τ |
+|-------|----:|--------:|---------:|-----------:|
+| [Microsoft CLAP](https://github.com/microsoft/CLAP) | 8.6641 | 0.1435 | 0.1389 | 0.0954 |
+| [Laion CLAP](https://github.com/LAION-AI/CLAP)      | 9.3944 | 0.1681 | 0.1610 | 0.1119 |
+| **Ours**        | **XXX** | **XXX** | **XXX** | **XXX** |
 
 ## 用語集
 
