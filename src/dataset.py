@@ -137,17 +137,40 @@ class AudioCapDataset(Dataset):
     def __len__(self):
         return len(self.database)
 
+    def _load_pre_extracted_feats(
+        self, feats_name: str, dataset_name: str, file_name: str
+    ) -> torch.Tensor:
+        """Load pre-extracted features from the specified file path."""
+        feats_dir = os.path.join(self.data_dir, "features", feats_name)
+        feat_path = os.path.join(feats_dir, dataset_name, file_name)
+        if not os.path.exists(feat_path):
+            raise FileNotFoundError(f"Feature file not found: {feat_path}")
+        feats = torch.load(feat_path)
+        return feats
+
     def __getitem__(self, idx):
+        """Get item by index from the dataset."""
         data = self.database[idx]
         data["audio"] = self._load_wav(data["audio_file_path"])
+
+        # load pre-extracted features if exist
+        file_name = os.path.basename(data["audio_file_path"]).replace(".wav", ".pt")
+        dataset_name = data["dataset"]
+
+        data["audio_feats"] = self._load_pre_extracted_feats(
+            feats_name="msclap_audio", dataset_name=dataset_name, file_name=file_name
+        )
+        data["text_feats"] = self._load_pre_extracted_feats(
+            feats_name="msclap_text", dataset_name=dataset_name, file_name=file_name
+        )
         return data
 
 
 if __name__ == "__main__":
     dataset = AudioCapDataset(data_dir="data", split="train")
     print(f"len(dataset)): {len(dataset)}")
-    sample = dataset[0]
-    print(sample["audio_file_path"])
-    print(sample["text"])
-    print(sample["score"])
-    print(sample["audio"].shape)
+    data = dataset[0]
+    print(f"data.keys(): {data.keys()}")
+    print(f"data['audio'].shape: {data['audio'].shape}")
+    print(f"data['audio_feats'].shape: {data['audio_feats'].shape}")
+    print(f"data['text_feats'].shape: {data['text_feats'].shape}")

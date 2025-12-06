@@ -7,6 +7,12 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from dataset import AudioCapDataset
+from utils.eval_methods import (
+    kendall_tau,
+    mse,
+    pearson_correlation,
+    spearman_correlation,
+)
 
 
 class AudioCapEval:

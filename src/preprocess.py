@@ -37,14 +37,13 @@ class MSClapEmbedder:
 
 def save_feats(
     feats_dir: str,
-    is_audio_feats: bool,
+    feats_name: str,
     dataset: str,
     audio_file_path: str,
     feats: torch.Tensor,
 ) -> str:
     file_name = os.path.basename(audio_file_path).replace(".wav", ".pt")
-    subdir = "audio" if is_audio_feats else "text"
-    save_path = os.path.join(feats_dir, subdir, dataset, file_name)
+    save_path = os.path.join(feats_dir, feats_name, dataset, file_name)
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     torch.save(feats, save_path)
     return save_path
@@ -67,8 +66,20 @@ def save_batch_feats(
         audio_file_path = audio_file_paths[i]
         audio_feat = audio_embs[i]
         text_feat = text_embs[i]
-        save_feats(feats_dir, True, dataset, audio_file_path, audio_feat)
-        save_feats(feats_dir, False, dataset, audio_file_path, text_feat)
+        save_feats(
+            feats_dir=feats_dir,
+            feats_name="msclap_audio",
+            dataset=dataset,
+            audio_file_path=audio_file_path,
+            feats=audio_feat,
+        )
+        save_feats(
+            feats_dir=feats_dir,
+            feats_name="msclap_text",
+            dataset=dataset,
+            audio_file_path=audio_file_path,
+            feats=text_feat,
+        )
 
 
 def main(args):
