@@ -15,6 +15,7 @@ class AudioCapDataset(Dataset):
         split: Literal["train", "val", "test"] = "train",
         bitrate: int = 16000,
         max_len: int = 160000 * 10,
+        dataset_name: list = ["relate", "pam_audio", "pam_music"],
     ):
         """Initialize AudioCapDataset with specified data directory and split."""
         self.data_dir = data_dir
@@ -22,8 +23,12 @@ class AudioCapDataset(Dataset):
         self.bitrate = bitrate
         self.max_len = max_len
         self.database = []
-        self._load_relate_data()
-        self._load_pam_data()
+        if "relate" in dataset_name:
+            self._load_relate_data()
+        if "pam_audio" in dataset_name:
+            self._load_pam_audio_data()
+        if "pam_music" in dataset_name:
+            self._load_pam_music_data()
 
     def _load_relate_data(self) -> None:
         """Load RELATE dataset and split into train, val, test sets."""
@@ -63,18 +68,14 @@ class AudioCapDataset(Dataset):
                 }
             )
 
-    def _load_pam_data(self) -> None:
-        """Load PAM dataset as test sets."""
+    def _load_pam_audio_data(self) -> None:
+        """Load PAM audio dataset as test sets."""
         if self.split != "test":
             return
         pam_audio_data_path = os.path.join(
             self.data_dir, "human_eval", "audio", "scores.csv"
         )
-        pam_music_data_path = os.path.join(
-            self.data_dir, "human_eval", "music", "scores.csv"
-        )
         pam_audio_data = pd.read_csv(pam_audio_data_path)
-        pam_music_data = pd.read_csv(pam_music_data_path)
 
         for _, row in tqdm(
             pam_audio_data.iterrows(),
@@ -96,6 +97,15 @@ class AudioCapDataset(Dataset):
                     "score": score,
                 }
             )
+
+    def _load_pam_music_data(self) -> None:
+        """Load PAM music dataset as test sets."""
+        if self.split != "test":
+            return
+        pam_music_data_path = os.path.join(
+            self.data_dir, "human_eval", "music", "scores.csv"
+        )
+        pam_music_data = pd.read_csv(pam_music_data_path)
 
         for _, row in tqdm(
             pam_music_data.iterrows(),
