@@ -20,29 +20,31 @@ class AudioCapPreprocessDataset(AudioCapDataset):
 
 
 class MSClapEmbedder:
-    def __init__(self):
+    def __init__(self, dtype: torch.dtype = torch.float32):
         self.model = CLAP(version="2023", use_cuda=True)
         self.max_text_len = 77  # MSCLAPのテキスト最大長
+        self.dtype = dtype
 
     def embed_texts(self, texts: list[str]) -> torch.Tensor:
         """テキストをバッチで埋め込む"""
         truncated_texts = [t[: self.max_text_len] for t in texts]
         with torch.no_grad():
             text_embeddings = self.model.get_text_embeddings(truncated_texts)
-        return text_embeddings
+        return text_embeddings.to(self.dtype)
 
     def embed_audios(self, audio_files: list[str]) -> torch.Tensor:
         """オーディオをバッチで埋め込む"""
         with torch.no_grad():
             audio_embeddings = self.model.get_audio_embeddings(audio_files)
-        return audio_embeddings
+        return audio_embeddings.to(self.dtype)
 
 
 class LaionClapEmbedder:
-    def __init__(self):
+    def __init__(self, dtype: torch.dtype = torch.float32):
         self.model = laion_clap.CLAP_Module(enable_fusion=False)
         self.model.load_ckpt("models/630k-audioset-best.pt")
         self.max_text_len = 77  # LaionCLAPのテキスト最大長
+        self.dtype = dtype
 
     def embed_texts(self, texts: list[str]) -> torch.Tensor:
         """テキストをバッチで埋め込む（長いテキストはトランケート）"""
@@ -51,7 +53,7 @@ class LaionClapEmbedder:
             text_embeddings = self.model.get_text_embedding(
                 truncated_texts, use_tensor=True
             )
-        return text_embeddings
+        return text_embeddings.to(self.dtype)
 
     def embed_audios(self, audio_files: list[str]) -> torch.Tensor:
         """オーディオをバッチで埋め込む"""
@@ -59,7 +61,7 @@ class LaionClapEmbedder:
             audio_embeddings = self.model.get_audio_embedding_from_filelist(
                 x=audio_files, use_tensor=True
             )
-        return audio_embeddings
+        return audio_embeddings.to(self.dtype)
 
 
 ### feature saving functions ###

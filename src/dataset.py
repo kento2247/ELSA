@@ -16,12 +16,14 @@ class AudioCapDataset(Dataset):
         bitrate: int = 16000,
         max_len: int = 160000 * 10,
         dataset_name: list = ["relate", "pam_audio", "pam_music"],
+        dtype: torch.dtype = torch.float32,
     ):
         """Initialize AudioCapDataset with specified data directory and split."""
         self.data_dir = data_dir
         self.split = split
         self.bitrate = bitrate
         self.max_len = max_len
+        self.dtype = dtype
         self.database = []
         if "relate" in dataset_name:
             self._load_relate_data()
@@ -143,7 +145,7 @@ class AudioCapDataset(Dataset):
             wav = wav[: self.max_len]
         else:
             wav = torch.nn.functional.pad(wav, (0, self.max_len - wav.shape[0]))
-        return wav
+        return wav.to(self.dtype)
 
     def __len__(self):
         return len(self.database)
@@ -157,7 +159,7 @@ class AudioCapDataset(Dataset):
         if not os.path.exists(feat_path):
             raise FileNotFoundError(f"Feature file not found: {feat_path}")
         feats = torch.load(feat_path, map_location="cpu")
-        return feats
+        return feats.to(self.dtype)
 
     def __getitem__(self, idx):
         """Get item by index from the dataset."""
