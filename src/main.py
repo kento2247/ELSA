@@ -29,6 +29,8 @@ class TTAEval:
         epochs: int = 10,
         log_wandb: bool = False,
         save_qualitative: bool = False,
+        subjective_metric: str = "REL",
+        test_dataset_names: list = ["relate", "pam_audio", "pam_music"],
     ):
         self.data_dir = data_dir
         self.model_dir = model_dir
@@ -37,6 +39,8 @@ class TTAEval:
         self.epochs = epochs
         self.log_wandb = log_wandb
         self.save_qualitative = save_qualitative
+        self.subjective_metric = subjective_metric
+        self.test_dataset_names = test_dataset_names
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = AudioTextSimilarityModel().to(self.device)
@@ -57,22 +61,22 @@ class TTAEval:
             self.meta_data["wandb_url"] = wandb.run.url
 
     def train(self): ...
-        
 
     def train_epoch(self, epoch: int) -> None: ...
-
 
     def evaluate(self) -> float: ...
 
     def test(self) -> dict:
         """Test the model and log metrics in npy format."""
-        test_dataset_names = ["relate", "pam_audio", "pam_music"]
         metrics: dict = {}
 
-        for test_dataset_name in test_dataset_names:
+        for test_dataset_name in self.test_dataset_names:
             print(f"Testing on {test_dataset_name} dataset")
-            test_dataset =TTADataset(
-                data_dir=self.data_dir, split="test", dataset_name=[test_dataset_name]
+            test_dataset = TTADataset(
+                data_dir=self.data_dir,
+                split="test",
+                dataset_name=[test_dataset_name],
+                subjective_metric=self.subjective_metric,
             )
             test_loader = DataLoader(
                 test_dataset,
@@ -97,8 +101,8 @@ class TTAEval:
                     )
                     scores: np.ndarray = batch["score"].numpy()
 
-                    preds: torch.Tensor = self.model(msclap_audio, msclap_text)
-                    # preds: torch.Tensor = self.model(laionclap_audio, laionclap_text)
+                    # preds: torch.Tensor = self.model(msclap_audio, msclap_text)
+                    preds: torch.Tensor = self.model(laionclap_audio, laionclap_text)
                     preds: np.ndarray = preds.squeeze(-1).cpu().numpy()
 
                     all_preds.append(preds)
@@ -127,11 +131,11 @@ class TTAEval:
         # lb_text for pasteing to leaderboard
         """relate.mse, relate.pearson, relate.spearman, relate.kendall_tau, pam_audio.mse, pam_audio.pearson, pam_audio.spearman, pam_audio.kendall_tau, pam_music.mse, pam_music.pearson, pam_music.spearman, pam_music.kendall_tau =  \n..."""
         lb_score_text = ""
-        for dataset_name in test_dataset_names:
+        for dataset_name in self.test_dataset_names:
             for metric_name in ["mse", "pearson", "spearman", "kendall_tau"]:
                 lb_score_text += f"{dataset_name}.{metric_name}, "
         lb_score_text = lb_score_text.strip().rstrip(",") + " =  \n"
-        for dataset_name in test_dataset_names:
+        for dataset_name in self.test_dataset_names:
             for metric_name in ["mse", "pearson", "spearman", "kendall_tau"]:
                 lb_score_text += f"{metrics[dataset_name][metric_name]:.4f}, "
         lb_score_text = lb_score_text.strip().rstrip(",")
@@ -199,13 +203,26 @@ def arg_parser():
         action="store_true",
         help="Whether to save qualitative results as csv during testing",
     )
+    parser.add_argument(
+        "--subjective_metric",
+        type=str,
+        default="REL",
+        choices=["OVL", "REL"],
+        help="Subjective metric to use from the dataset",
+    )
+    parser.add_argument(
+        "--test_dataset_names",
+        type=str,
+        nargs="+",
+        default=["relate", "pam_audio", "pam_music"],
+        help="List of dataset names to test on",
+    )
 
-    return parser
+    return parser.parse_args()
 
 
 if __name__ == "__main__":
-    parser = arg_parser()
-    args = parser.parse_args()
+    args = arg_parser()
 
     evaluator = TTAEval(
         data_dir=args.data_dir,
@@ -215,6 +232,8 @@ if __name__ == "__main__":
         epochs=args.epochs,
         log_wandb=args.log_wandb,
         save_qualitative=args.save_qualitative,
+        subjective_metric=args.subjective_metric,
+        test_dataset_names=args.test_dataset_names,
     )
 
     if args.mode == "train":

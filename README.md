@@ -113,38 +113,60 @@ score,pred
 
 ## 定量結果
 
-### ALL DATASETS
+### ALL DATASETS (REL)
 | Model | MSE ↓ | Pearson ↑ | Spearman ↑ | Kendall τ ↑ |
 |-------|------:|----------:|-----------:|------------:|
 | [Microsoft CLAP](https://github.com/microsoft/CLAP) | 41.29 | 0.266 | 0.246 | 0.174 |
 | [Laion CLAP](https://github.com/LAION-AI/CLAP) | 42.10 | 0.316 | 0.299 | 0.210 |
 | Ours | XXX | XXX | XXX | XXX |
-### RELATE
+
+### RELATE (REL)
 | Model | MSE ↓ | Pearson ↑ | Spearman ↑ | Kendall τ ↑ |
 |-------|------:|----------:|-----------:|------------:|
 | [Microsoft CLAP](https://github.com/microsoft/CLAP) | 49.5852 | 0.1119 | 0.1055 | 0.0759 |
 | [Laion CLAP](https://github.com/LAION-AI/CLAP)      | 50.3553 | 0.1282 | 0.1253 | 0.0901 |
 | **Ours**        | **XXX** | **XXX** | **XXX** | **XXX** |
 
-### PAM-Audio
+### RELATE (OVL)
+| Model | MSE ↓ | Pearson ↑ | Spearman ↑ | Kendall τ ↑ |
+|-------|------:|----------:|-----------:|------------:|
+| [Microsoft CLAP](https://github.com/microsoft/CLAP) | XXX | XXX | XXX | XXX |
+| [Laion CLAP](https://github.com/LAION-AI/CLAP)      | XXX | XXX | XXX | XXX |
+| **Ours**        | **XXX** | **XXX** | **XXX** | **XXX** |
+
+### AudioCap (REL)
 | Model | MSE ↓ | Pearson ↑ | Spearman ↑ | Kendall τ ↑ |
 |-------|------:|----------:|-----------:|------------:|
 | [Microsoft CLAP](https://github.com/microsoft/CLAP) | 9.2164 | 0.1338 | 0.1494 | 0.1025 |
 | [Laion CLAP](https://github.com/LAION-AI/CLAP)      | 10.0086 | 0.2137 | 0.2193 | 0.1491 |
 | **Ours**        | **XXX** | **XXX** | **XXX** | **XXX** |
 
-### PAM-Music
+### MusicCap (REL)
 | Model | MSE ↓ | Pearson ↑ | Spearman ↑ | Kendall τ ↑ |
 |-------|------:|----------:|-----------:|------------:|
 | [Microsoft CLAP](https://github.com/microsoft/CLAP) | 8.6641 | 0.1435 | 0.1389 | 0.0954 |
 | [Laion CLAP](https://github.com/LAION-AI/CLAP)      | 9.3944 | 0.1681 | 0.1610 | 0.1119 |
 | **Ours**        | **XXX** | **XXX** | **XXX** | **XXX** |
 
+### AudioCap (OVL)
+| Model | MSE ↓ | Pearson ↑ | Spearman ↑ | Kendall τ ↑ |
+|-------|------:|----------:|-----------:|------------:|
+| [Microsoft CLAP](https://github.com/microsoft/CLAP) | 7.3574 |  0.0653 | 0.0903 | 0.0619 |
+| [Laion CLAP](https://github.com/LAION-AI/CLAP)      | 8.0730 | 0.1240 | 0.1360 | 0.0925 |
+| **Ours**        | **XXX** | **XXX** | **XXX** | **XXX** |
+
+### MusicCap (OVL)
+| Model | MSE ↓ | Pearson ↑ | Spearman ↑ | Kendall τ ↑ |
+|-------|------:|----------:|-----------:|------------:|
+| [Microsoft CLAP](https://github.com/microsoft/CLAP) |8.6641 | 0.1435 | 0.1389 | 0.0954 |
+| [Laion CLAP](https://github.com/LAION-AI/CLAP)      | 6.2945 | 0.0482 | 0.0502 | 0.0329 |
+| **Ours**        | **XXX** | **XXX** | **XXX** | **XXX** |
+
 ## 用語集
 
 | 用語 | 説明 |
 |------|------|
-| OVL | 音声キャプションのオーバーラップ評価指標 |
-| REL | 音声キャプション評価用データセット |
+| OVL | 音声の音質評価 |
+| REL | 音声キャプションの類似度評価 |
 | OS | 音声キャプションの一貫性評価指標 |
 | IS | 音声キャプションの多様性評価指標 |

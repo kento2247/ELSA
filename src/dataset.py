@@ -16,6 +16,7 @@ class TTADataset(Dataset):
         bitrate: int = 16000,
         max_len: int = 160000 * 10,
         dataset_name: list = ["relate", "pam_audio", "pam_music"],
+        subjective_metric: Literal["OVL", "REL"] = "REL",
         dtype: torch.dtype = torch.float32,
     ):
         """Initialize TTADataset with specified data directory and split."""
@@ -23,6 +24,7 @@ class TTADataset(Dataset):
         self.split = split
         self.bitrate = bitrate
         self.max_len = max_len
+        self.subjective_metric = subjective_metric
         self.dtype = dtype
         self.database = []
         if "relate" in dataset_name:
@@ -87,7 +89,7 @@ class TTADataset(Dataset):
             text: str = row["Text"]
             model: str = row["Model"]
             file_name: str = row["File Name"]
-            score: float = float(row["REL"])
+            score: float = float(row[self.subjective_metric])
             self.database.append(
                 {
                     "dataset": "pam_audio",
@@ -117,7 +119,7 @@ class TTADataset(Dataset):
             text: str = row["Text"]
             model: str = row["Model"]
             file_name: str = row["File Name"]
-            score: float = float(row["REL"])
+            score: float = float(row[self.subjective_metric])
             self.database.append(
                 {
                     "dataset": "pam_music",
