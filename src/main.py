@@ -57,6 +57,10 @@ class TTAEval:
             self.meta_data["wandb_url"] = wandb.run.url
 
     def train(self): ...
+        
+
+    def train_epoch(self, epoch: int) -> None: ...
+
 
     def evaluate(self) -> float: ...
 
