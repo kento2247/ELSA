@@ -16,7 +16,7 @@ wheels = [
 ]
 
 [[package]]
-name = "audiocapeval"
+name = "ttaeval"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

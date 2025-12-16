@@ -9,7 +9,7 @@ import wandb
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from dataset import AudioCapDataset
+from dataset import TTADataset
 from model import AudioTextSimilarityModel
 from utils.eval_methods import (
     kendall_tau,
@@ -19,7 +19,7 @@ from utils.eval_methods import (
 )
 
 
-class AudioCapEval:
+class TTAEval:
     def __init__(
         self,
         data_dir: str,
@@ -52,7 +52,7 @@ class AudioCapEval:
             "run_command": run_command,
         }
         if self.log_wandb:
-            wandb.init(project="AudioCapEval")
+            wandb.init(project="TTAEval")
             self.meta_data["wandb_run_id"] = wandb.run.id
             self.meta_data["wandb_url"] = wandb.run.url
 
@@ -67,7 +67,7 @@ class AudioCapEval:
 
         for test_dataset_name in test_dataset_names:
             print(f"Testing on {test_dataset_name} dataset")
-            test_dataset = AudioCapDataset(
+            test_dataset =TTADataset(
                 data_dir=self.data_dir, split="test", dataset_name=[test_dataset_name]
             )
             test_loader = DataLoader(
@@ -203,7 +203,7 @@ if __name__ == "__main__":
     parser = arg_parser()
     args = parser.parse_args()
 
-    evaluator = AudioCapEval(
+    evaluator = TTAEval(
         data_dir=args.data_dir,
         model_dir=args.model_dir,
         batch_size=args.bs,

@@ -8,7 +8,7 @@ from torch.utils.data import Dataset
 from tqdm import tqdm
 
 
-class AudioCapDataset(Dataset):
+class TTADataset(Dataset):
     def __init__(
         self,
         data_dir: str,
@@ -18,7 +18,7 @@ class AudioCapDataset(Dataset):
         dataset_name: list = ["relate", "pam_audio", "pam_music"],
         dtype: torch.dtype = torch.float32,
     ):
-        """Initialize AudioCapDataset with specified data directory and split."""
+        """Initialize TTADataset with specified data directory and split."""
         self.data_dir = data_dir
         self.split = split
         self.bitrate = bitrate
@@ -186,7 +186,7 @@ class AudioCapDataset(Dataset):
 
 
 if __name__ == "__main__":
-    dataset = AudioCapDataset(data_dir="data", split="train")
+    dataset = TTADataset(data_dir="data", split="train")
     print(f"len(dataset)): {len(dataset)}")
     data = dataset[0]
     print(f"data.keys(): {data.keys()}")

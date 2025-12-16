@@ -7,10 +7,10 @@ import torchaudio
 from msclap import CLAP
 from tqdm import tqdm
 
-from dataset import AudioCapDataset
+from dataset import TTADataset
 
 
-class AudioCapPreprocessDataset(AudioCapDataset):
+class TTAPreprocessDataset(TTADataset):
     def __init__(self, data_dir: str, split: str = "train"):
         super().__init__(data_dir, split)
 
@@ -166,7 +166,7 @@ def laionclap_extract(dataloader, feats_dir: str):
 
 
 def main(args):
-    dataset = AudioCapPreprocessDataset(data_dir=args.data_dir, split=args.split)
+    dataset = TTAPreprocessDataset(data_dir=args.data_dir, split=args.split)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=args.bs, shuffle=True)
 
     msclap_extract(dataloader, args.feats_dir)

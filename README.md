@@ -1,4 +1,4 @@
-# AudioCapEval
+# TTAEvalEval
 
 音声キャプション（Audio Captioning）の評価を行うためのツールキット。
 
