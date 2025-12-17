@@ -147,7 +147,7 @@ uv run ruff check --fix # 自動修正
 | Spearman | スピアマンの順位相関係数 |
 | Kendall's τ | ケンドールの順位相関係数 |
 
-## ベースライン結果
+## Qualitative Results
 
 ### REL（Audio-キャプション間の類似度評価）
 
@@ -157,6 +157,7 @@ uv run ruff check --fix # 自動修正
 | [Microsoft CLAP](https://github.com/microsoft/CLAP) | 49.5852 | 0.1119 | 0.1055 | 0.0759 |
 | [LAION CLAP](https://github.com/LAION-AI/CLAP) | 50.3553 | 0.1282 | 0.1253 | 0.0901 |
 | [PAM](https://github.com/soham97/PAM) | 53.9596 | -0.0238 | -0.0207 | -0.0149 |
+| Ours | XXX | XXX | XXX | XXX |
 
 #### AudioCap Dataset
 | Model | MSE ↓ | Pearson ↑ | Spearman ↑ | Kendall τ ↑ |
@@ -164,6 +165,7 @@ uv run ruff check --fix # 自動修正
 | [Microsoft CLAP](https://github.com/microsoft/CLAP) | 9.2164 | 0.1338 | 0.1494 | 0.1025 |
 | [LAION CLAP](https://github.com/LAION-AI/CLAP) | 10.0086 | 0.2137 | 0.2193 | 0.1491 |
 | [PAM](https://github.com/soham97/PAM) | 9.9202 | -0.0305 | -0.0788 | -0.0517 |
+| Ours | XXX | XXX | XXX | XXX |
 
 #### MusicCap Dataset
 | Model | MSE ↓ | Pearson ↑ | Spearman ↑ | Kendall τ ↑ |
@@ -171,6 +173,7 @@ uv run ruff check --fix # 自動修正
 | [Microsoft CLAP](https://github.com/microsoft/CLAP) | 8.6641 | 0.1435 | 0.1389 | 0.0954 |
 | [LAION CLAP](https://github.com/LAION-AI/CLAP) | 9.3944 | 0.1681 | 0.1610 | 0.1119 |
 | [PAM](https://github.com/soham97/PAM) | 8.8781 | 0.0537 | 0.0496 | 0.0340 |
+| Ours | XXX | XXX | XXX | XXX |
 
 ### OVL（Audio音質評価）
 
@@ -180,6 +183,7 @@ uv run ruff check --fix # 自動修正
 | [Microsoft CLAP](https://github.com/microsoft/CLAP) | 7.3574 | 0.0653 | 0.0903 | 0.0619 |
 | [LAION CLAP](https://github.com/LAION-AI/CLAP) | 8.0730 | 0.1240 | 0.1360 | 0.0925 |
 | [PAM](https://github.com/soham97/PAM) | 7.9779 | -0.0553 | -0.0949 | -0.0667 |
+| Ours | XXX | XXX | XXX | XXX |
 
 #### MusicCap Dataset
 | Model | MSE ↓ | Pearson ↑ | Spearman ↑ | Kendall τ ↑ |
@@ -187,14 +191,7 @@ uv run ruff check --fix # 自動修正
 | [Microsoft CLAP](https://github.com/microsoft/CLAP) | 8.6641 | 0.1435 | 0.1389 | 0.0954 |
 | [LAION CLAP](https://github.com/LAION-AI/CLAP) | 6.2945 | 0.0482 | 0.0502 | 0.0329 |
 | [PAM](https://github.com/soham97/PAM) | 5.8532 | 0.0235 | 0.0290 | 0.0198 |
-
-## 用語集
-
-| 用語 | 説明 |
-|------|------|
-| REL | Relevance - Audio-キャプション間の類似度評価 |
-| OVL | Overall Quality - Audioの音質評価 |
-| CLAP | Contrastive Language-Audio Pretraining |
+| Ours | XXX | XXX | XXX | XXX |
 
 ## プロジェクト構成
 
