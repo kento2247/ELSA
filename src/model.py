@@ -33,19 +33,21 @@ class AudioTextSimilarityModel(nn.Module):
         Returns:
             Similarity scores [B]
         """
-        hadamard_product = audio_feats * text_feats
-        diff = audio_feats - text_feats
+        batch_size = audio_feats.size(0)
+        hadamard_product = audio_feats * text_feats  # [B, D]
+        diff = audio_feats - text_feats  # [B, D]
+        cls_tokens = self.cls_token.expand(batch_size, -1, -1)  # [B, 1, D]
         features = torch.cat(
             [
-                self.cls_token,
-                hadamard_product.unsqueeze(-1),
-                diff.unsqueeze(-1),
-                audio_feats.unsqueeze(-1),
-                text_feats.unsqueeze(-1),
+                cls_tokens,
+                hadamard_product.unsqueeze(1),
+                diff.unsqueeze(1),
+                audio_feats.unsqueeze(1),
+                text_feats.unsqueeze(1),
             ],
-            dim=-1,
-        )  # [B, 4, D]
-        features = self.transformer(features)  # [B, 4, D]
+            dim=1,
+        )  # [B, 5, D]
+        features = self.transformer(features)  # [B, 5, D]
         cls_features = features[:, 0, :]  # [B, D]
         preds = self.prediction_head(cls_features)  # [B, 1]
         return preds  # [B, 1]
