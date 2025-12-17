@@ -23,14 +23,14 @@ class TTAEval:
     def __init__(
         self,
         data_dir: str,
-        model_dir: str = "models",
-        batch_size: int = 32,
-        lr: float = 1e-4,
-        epochs: int = 10,
-        log_wandb: bool = False,
-        save_qualitative: bool = False,
-        subjective_metric: str = "REL",
-        test_dataset_names: list = ["relate", "pam_audio", "pam_music"],
+        model_dir: str,
+        batch_size: int,
+        lr: float,
+        epochs: int,
+        log_wandb: bool,
+        save_qualitative: bool,
+        subjective_metrics: list[str],
+        test_dataset_names: list,
     ):
         self.data_dir = data_dir
         self.model_dir = model_dir
@@ -39,7 +39,7 @@ class TTAEval:
         self.epochs = epochs
         self.log_wandb = log_wandb
         self.save_qualitative = save_qualitative
-        self.subjective_metric = subjective_metric
+        self.subjective_metrics = subjective_metrics
         self.test_dataset_names = test_dataset_names
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -69,78 +69,91 @@ class TTAEval:
     def test(self) -> dict:
         """Test the model and log metrics in npy format."""
         metrics: dict = {}
+        lb_header_text = ""
+        lb_score_text = ""
 
-        for test_dataset_name in self.test_dataset_names:
-            print(f"Testing on {test_dataset_name} dataset")
-            test_dataset = TTADataset(
-                data_dir=self.data_dir,
-                split="test",
-                dataset_name=[test_dataset_name],
-                subjective_metric=self.subjective_metric,
-            )
-            test_loader = DataLoader(
-                test_dataset,
-                batch_size=self.batch_size,
-                shuffle=False,
-                num_workers=4,
-            )
-
-            self.model.eval()
-            all_preds: list[np.ndarray] = []
-            all_scores: list[np.ndarray] = []
-
-            with torch.no_grad():
-                for batch in tqdm(test_loader, desc="Testing"):
-                    msclap_audio: torch.Tensor = batch["msclap_audio"].to(self.device)
-                    msclap_text: torch.Tensor = batch["msclap_text"].to(self.device)
-                    laionclap_audio: torch.Tensor = batch["laionclap_audio"].to(
-                        self.device
+        for subjective_metric in self.subjective_metrics:
+            for test_dataset_name in self.test_dataset_names:
+                test_dataset = TTADataset(
+                    data_dir=self.data_dir,
+                    split="test",
+                    dataset_names=[test_dataset_name],
+                    subjective_metrics=[subjective_metric],
+                )
+                if len(test_dataset) == 0:
+                    print(
+                        f"Skipping {test_dataset_name} for {subjective_metric} as no data found."
                     )
-                    laionclap_text: torch.Tensor = batch["laionclap_text"].to(
-                        self.device
+                    continue
+
+                print(
+                    f"Testing on {test_dataset_name} dataset, subjective metrics: {subjective_metric}"
+                )
+                test_loader = DataLoader(
+                    test_dataset,
+                    batch_size=self.batch_size,
+                    shuffle=False,
+                    num_workers=4,
+                )
+
+                self.model.eval()
+                all_preds: list[np.ndarray] = []
+                all_scores: list[np.ndarray] = []
+
+                with torch.no_grad():
+                    for batch in tqdm(test_loader, desc="Testing"):
+                        msclap_audio: torch.Tensor = batch["msclap_audio"].to(
+                            self.device
+                        ) 
+                        msclap_text: torch.Tensor = batch["msclap_text"].to(self.device)
+                        laionclap_audio: torch.Tensor = batch["laionclap_audio"].to(
+                            self.device
+                        )
+                        laionclap_text: torch.Tensor = batch["laionclap_text"].to(
+                            self.device
+                        )
+                        scores: np.ndarray = batch["score"].numpy()
+
+                        # preds: torch.Tensor = self.model(msclap_audio, msclap_text)
+                        preds: torch.Tensor = self.model(
+                            laionclap_audio, laionclap_text
+                        )
+                        preds: np.ndarray = preds.squeeze(-1).cpu().numpy()
+
+                        all_preds.append(preds)
+                        all_scores.append(scores)
+
+                all_preds = np.concatenate(all_preds)
+                all_scores = np.concatenate(all_scores)
+
+                # Calculate metrics
+                mse_val: float = mse(all_scores, all_preds)
+                pearson_val: float = pearson_correlation(all_scores, all_preds)
+                spearman_val: float = spearman_correlation(all_scores, all_preds)
+                kendall_val: float = kendall_tau(all_scores, all_preds)
+
+                if subjective_metric not in metrics:
+                    metrics[subjective_metric] = {}
+                metrics[subjective_metric][test_dataset_name] = {
+                    "mse": mse_val,
+                    "pearson": pearson_val,
+                    "spearman": spearman_val,
+                    "kendall_tau": kendall_val,
+                }
+
+                for metric_name in ["mse", "pearson", "spearman", "kendall_tau"]:
+                    lb_header_text += (
+                        f"{subjective_metric}.{test_dataset_name}.{metric_name}, "
                     )
-                    scores: np.ndarray = batch["score"].numpy()
-
-                    # preds: torch.Tensor = self.model(msclap_audio, msclap_text)
-                    preds: torch.Tensor = self.model(laionclap_audio, laionclap_text)
-                    preds: np.ndarray = preds.squeeze(-1).cpu().numpy()
-
-                    all_preds.append(preds)
-                    all_scores.append(scores)
-
-            all_preds = np.concatenate(all_preds)
-            all_scores = np.concatenate(all_scores)
-
-            # Calculate metrics
-            mse_val: float = mse(all_scores, all_preds)
-            pearson_val: float = pearson_correlation(all_scores, all_preds)
-            spearman_val: float = spearman_correlation(all_scores, all_preds)
-            kendall_val: float = kendall_tau(all_scores, all_preds)
-
-            metrics[test_dataset_name] = {
-                "mse": mse_val,
-                "pearson": pearson_val,
-                "spearman": spearman_val,
-                "kendall_tau": kendall_val,
-            }
+                    lb_score_text += f"{metrics[subjective_metric][test_dataset_name][metric_name]:.4f}, "
 
         # Log to wandb if enabled
         if self.log_wandb:
             wandb.log(metrics)
 
         # lb_text for pasteing to leaderboard
-        """relate.mse, relate.pearson, relate.spearman, relate.kendall_tau, pam_audio.mse, pam_audio.pearson, pam_audio.spearman, pam_audio.kendall_tau, pam_music.mse, pam_music.pearson, pam_music.spearman, pam_music.kendall_tau =  \n..."""
-        lb_score_text = ""
-        for dataset_name in self.test_dataset_names:
-            for metric_name in ["mse", "pearson", "spearman", "kendall_tau"]:
-                lb_score_text += f"{dataset_name}.{metric_name}, "
-        lb_score_text = lb_score_text.strip().rstrip(",") + " =  \n"
-        for dataset_name in self.test_dataset_names:
-            for metric_name in ["mse", "pearson", "spearman", "kendall_tau"]:
-                lb_score_text += f"{metrics[dataset_name][metric_name]:.4f}, "
-        lb_score_text = lb_score_text.strip().rstrip(",")
-        print("Leaderboard Score Text:")
-        print(lb_score_text)
+        lb_text = lb_header_text.rstrip(", ") + "\n" + lb_score_text.rstrip(", ")
+        print(f"Leaderboard Text: {lb_text}")
 
         # Save as json
         if self.save_qualitative:
@@ -150,7 +163,7 @@ class TTAEval:
                 "predictions": all_preds.tolist(),
                 "scores": all_scores.tolist(),
                 "meta_data": self.meta_data,
-                "lb_score_text": lb_score_text,
+                "lb_text": lb_text,
             }
             qualitative_path = os.path.join(self.model_dir, "qualitative_results.json")
             json.dump(qualitative_data, open(qualitative_path, "w"), indent=1)
@@ -204,17 +217,18 @@ def arg_parser():
         help="Whether to save qualitative results as csv during testing",
     )
     parser.add_argument(
-        "--subjective_metric",
+        "--subjective_metrics",
         type=str,
-        default="REL",
-        choices=["OVL", "REL"],
+        nargs="+",
+        default=["REL", "OVL"],
+        choices=["REL", "OVL"],
         help="Subjective metric to use from the dataset",
     )
     parser.add_argument(
         "--test_dataset_names",
         type=str,
         nargs="+",
-        default=["relate", "pam_audio", "pam_music"],
+        default=["relate", "audiocap", "musiccap"],
         help="List of dataset names to test on",
     )
 
@@ -232,7 +246,7 @@ if __name__ == "__main__":
         epochs=args.epochs,
         log_wandb=args.log_wandb,
         save_qualitative=args.save_qualitative,
-        subjective_metric=args.subjective_metric,
+        subjective_metrics=args.subjective_metrics,
         test_dataset_names=args.test_dataset_names,
     )
 

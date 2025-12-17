@@ -3,8 +3,8 @@ import os
 
 import laion_clap
 import torch
-import torchaudio
 from msclap import CLAP
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from dataset import TTADataset
@@ -167,7 +167,7 @@ def laionclap_extract(dataloader, feats_dir: str):
 
 def main(args):
     dataset = TTAPreprocessDataset(data_dir=args.data_dir, split=args.split)
-    dataloader = torch.utils.data.DataLoader(dataset, batch_size=args.bs, shuffle=True)
+    dataloader = DataLoader(dataset, batch_size=args.bs, shuffle=True)
 
     msclap_extract(dataloader, args.feats_dir)
     laionclap_extract(dataloader, args.feats_dir)
