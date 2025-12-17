@@ -31,6 +31,7 @@ class TTAEval:
         save_qualitative: bool,
         subjective_metrics: list[str],
         test_dataset_names: list,
+        eval_freq: int,
     ):
         self.data_dir = data_dir
         self.model_dir = model_dir
@@ -41,6 +42,7 @@ class TTAEval:
         self.save_qualitative = save_qualitative
         self.subjective_metrics = subjective_metrics
         self.test_dataset_names = test_dataset_names
+        self.eval_freq = eval_freq
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = AudioTextSimilarityModel().to(self.device)
@@ -60,11 +62,109 @@ class TTAEval:
             self.meta_data["wandb_run_id"] = wandb.run.id
             self.meta_data["wandb_url"] = wandb.run.url
 
-    def train(self): ...
+    def train(self):
+        """Train the model with periodic evaluation on val and test sets."""
+        train_dataset = TTADataset(
+            data_dir=self.data_dir,
+            split="train",
+            dataset_names=["relate"],
+            subjective_metrics=["REL"],
+        )
+        val_dataset = TTADataset(
+            data_dir=self.data_dir,
+            split="val",
+            dataset_names=["relate"],
+            subjective_metrics=["REL"],
+        )
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=self.batch_size,
+            shuffle=True,
+            num_workers=4,
+        )
+        val_loader = DataLoader(
+            val_dataset,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=4,
+        )
+        del train_dataset
+        del val_dataset
 
-    def train_epoch(self, epoch: int) -> None: ...
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
+        self.criterion = torch.nn.MSELoss()
 
-    def evaluate(self) -> float: ...
+        best_val_loss = float("inf")
+
+        for epoch in range(1, self.epochs + 1):
+            train_loss = self.train_epoch(epoch, train_loader)
+            print(f"Epoch {epoch}/{self.epochs} - Train Loss: {train_loss:.4f}")
+
+            if self.log_wandb:
+                wandb.log({"epoch": epoch, "train_loss": train_loss})
+
+            if epoch % self.eval_freq == 0:
+                val_loss = self.evaluate(val_loader)
+                print(f"Epoch {epoch}/{self.epochs} - Val Loss: {val_loss:.4f}")
+
+                if self.log_wandb:
+                    wandb.log({"epoch": epoch, "val_loss": val_loss})
+
+                if val_loss < best_val_loss:
+                    best_val_loss = val_loss
+                    self.save_model("best_model.pt")
+                    print(f"Best model saved with val_loss: {val_loss:.4f}")
+
+                print(f"Running test at epoch {epoch}...")
+                self.test()
+
+        self.save_model("final_model.pt")
+        print("Training completed. Final model saved.")
+
+    def train_epoch(self, epoch: int, train_loader: DataLoader) -> float:
+        """Train for one epoch and return average loss."""
+        self.model.train()
+        total_loss = 0.0
+        num_batches = 0
+
+        for batch in tqdm(train_loader, desc=f"Training Epoch {epoch}"):
+            laionclap_audio: torch.Tensor = batch["laionclap_audio"].to(self.device)
+            laionclap_text: torch.Tensor = batch["laionclap_text"].to(self.device)
+            scores: torch.Tensor = batch["score"].float().to(self.device)
+
+            self.optimizer.zero_grad()
+            preds: torch.Tensor = self.model(laionclap_audio, laionclap_text)
+            preds = preds.squeeze(-1)
+
+            loss = self.criterion(preds, scores)
+            loss.backward()
+            self.optimizer.step()
+
+            total_loss += loss.item()
+            num_batches += 1
+
+        return total_loss / num_batches
+
+    def evaluate(self, val_loader: DataLoader) -> float:
+        """Evaluate the model on validation set and return average loss."""
+        self.model.eval()
+        total_loss = 0.0
+        num_batches = 0
+
+        with torch.no_grad():
+            for batch in tqdm(val_loader, desc="Validation"):
+                laionclap_audio: torch.Tensor = batch["laionclap_audio"].to(self.device)
+                laionclap_text: torch.Tensor = batch["laionclap_text"].to(self.device)
+                scores: torch.Tensor = batch["score"].float().to(self.device)
+
+                preds: torch.Tensor = self.model(laionclap_audio, laionclap_text)
+                preds = preds.squeeze(-1)
+
+                loss = self.criterion(preds, scores)
+                total_loss += loss.item()
+                num_batches += 1
+
+        return total_loss / num_batches
 
     def test(self) -> dict:
         """Test the model and log metrics in npy format."""
@@ -104,7 +204,7 @@ class TTAEval:
                     for batch in tqdm(test_loader, desc="Testing"):
                         msclap_audio: torch.Tensor = batch["msclap_audio"].to(
                             self.device
-                        ) 
+                        )
                         msclap_text: torch.Tensor = batch["msclap_text"].to(self.device)
                         laionclap_audio: torch.Tensor = batch["laionclap_audio"].to(
                             self.device
@@ -195,6 +295,9 @@ def arg_parser():
     parser.add_argument("--epochs", type=int, default=10, help="Number of epochs")
     parser.add_argument("--bs", type=int, default=32, help="Batch size")
     parser.add_argument(
+        "--eval_freq", type=int, default=5, help="Evaluation frequency (in epochs)"
+    )
+    parser.add_argument(
         "--data_dir",
         type=str,
         default="data",
@@ -248,6 +351,7 @@ if __name__ == "__main__":
         save_qualitative=args.save_qualitative,
         subjective_metrics=args.subjective_metrics,
         test_dataset_names=args.test_dataset_names,
+        eval_freq=args.eval_freq,
     )
 
     if args.mode == "train":
