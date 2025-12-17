@@ -12,7 +12,7 @@ from dataset import TTADataset
 
 class TTAPreprocessDataset(TTADataset):
     def __init__(self, data_dir: str, split: str = "train"):
-        super().__init__(data_dir, split)
+        super().__init__(data_dir=data_dir, split=split)
 
     def __getitem__(self, idx: int) -> dict:
         data = self.database[idx]
