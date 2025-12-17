@@ -66,7 +66,7 @@ class LaionClapEmbedder:
         return audio_embeddings.to(self.dtype)
 
 
-class QwenParser:
+class QwenTextParser:
     def __init__(self, model_name: str = "Qwen/Qwen3-4B-Instruct-2507"):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -187,6 +187,16 @@ class QwenParser:
         return responses
 
 
+class SamAudio:
+    def __init__(self, model_name: str = "sam-audio-large"):
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        ...
+
+    def split_audio(
+        self, audio_files: list[str], text_prompts: list[str]
+    ) -> list[list[str]]: ...
+
+
 ### feature saving functions ###
 
 
@@ -300,22 +310,22 @@ def laionclap_extract(dataloader, feats_dir: str):
 
 
 def text_parse(dataloader, feats_dir: str):
-    qwen_parser = QwenParser()
+    qwen_text_parser = QwenTextParser()
     for batch in tqdm(dataloader, desc="Parsing Text with Qwen"):
         texts = batch["text"]
+        text_ids = batch["text_id"]
         datasets = batch["dataset"]
-        audio_files = batch["audio_file_path"]
 
-        # Implement text parsing logic here using qwen_parser
-        audio_sources: list[str] = qwen_parser.parse_texts(texts)
+        # Implement text parsing logic here using qwen_text_parser
+        audio_sources: list[str] = qwen_text_parser.parse_texts(texts)
 
-        for audio_file, dataset, sources in zip(audio_files, datasets, audio_sources):
+        for text_id, dataset, sources in zip(text_ids, datasets, audio_sources):
             save_path = os.path.join(
-                feats_dir, "parsed_texts", dataset, os.path.basename(audio_file)
-            ).replace(".wav", ".json")
+                feats_dir, "parsed_texts", dataset, f"{text_id}.json"
+            )
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
             with open(save_path, "w") as f:
-                json.dump(sources, f, ensure_ascii=False, indent=1)
+                json.dump(sources, f, ensure_ascii=False, indent=0)
 
 
 def main(args):
