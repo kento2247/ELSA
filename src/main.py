@@ -114,10 +114,10 @@ class TTAEval:
                         )
                         scores: np.ndarray = batch["score"].numpy()
 
-                        # preds: torch.Tensor = self.model(msclap_audio, msclap_text)
-                        preds: torch.Tensor = self.model(
-                            laionclap_audio, laionclap_text
-                        )
+                        preds: torch.Tensor = self.model(msclap_audio, msclap_text)
+                        # preds: torch.Tensor = self.model(
+                        #     laionclap_audio, laionclap_text
+                        # )
                         preds: np.ndarray = preds.squeeze(-1).cpu().numpy()
 
                         all_preds.append(preds)
