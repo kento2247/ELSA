@@ -12,7 +12,7 @@ class TTADataset(Dataset):
     def __init__(
         self,
         data_dir: str,
-        subjective_metrics: list[Literal["REL", "OVL"]],
+        subjective_metrics: list[Literal["REL", "OVL"]] = ["REL", "OVL"],
         dataset_names: list[str] = ["relate", "audiocap", "musiccap"],
         split: Literal["train", "val", "test"] = "train",
         bitrate: int = 16000,
