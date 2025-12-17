@@ -1,6 +1,6 @@
-# TTAEvalEval
+# TTAEval
 
-音声キャプション（Audio Captioning）の評価を行うためのツールキット。
+TextToAudio（Audio生成）の評価を行うためのツールキット。
 
 ## インストール
 
@@ -11,6 +11,7 @@ uv sync
 ### 動作環境
 - Python 3.10.0
 - CUDA 11.8（GPU使用時）
+- VRAM 24GB (RTX4090推奨)
 
 ## データセットのダウンロード
 
