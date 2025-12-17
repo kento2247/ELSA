@@ -52,11 +52,12 @@ class TTADataset(Dataset):
             data = relate_rel_data[relate_rel_data["in RELATE dataset"] == "validation"]
         data = data.reset_index(drop=True)
 
-        for _, row in tqdm(
+        for index, row in tqdm(
             data.iterrows(),
             total=len(data),
             desc=f"Loading RELATE {split} {subjective_metric} data",
         ):
+            text_id: str = f"{split}_{subjective_metric}_{index}"
             wavname: str = row["wavname"]
             text: str = row["text"]
             score: float = float(row["score"])
@@ -75,6 +76,7 @@ class TTADataset(Dataset):
             self.database.append(
                 {
                     "dataset": "relate",
+                    "text_id": text_id,
                     "audio_file_path": audio_file_path,
                     "ref_audio_file_path": ref_audio_file_path,
                     "text": text,
@@ -91,11 +93,12 @@ class TTADataset(Dataset):
         )
         audiocap_data = pd.read_csv(audiocap_data_path)
 
-        for _, row in tqdm(
+        for index, row in tqdm(
             audiocap_data.iterrows(),
             total=len(audiocap_data),
             desc=f"Loading AudioCap {split} {subjective_metric} data",
         ):
+            text_id: str = f"{split}_{subjective_metric}_{index}"
             text: str = row["Text"]
             model: str = row["Model"]
             file_name: str = row["File Name"]
@@ -103,6 +106,7 @@ class TTADataset(Dataset):
             self.database.append(
                 {
                     "dataset": "audiocap",
+                    "text_id": text_id,
                     "audio_file_path": os.path.join(
                         self.data_dir, "human_eval", "audio", model, f"{file_name}.wav"
                     ),
@@ -121,11 +125,12 @@ class TTADataset(Dataset):
         )
         musiccap_data = pd.read_csv(musiccap_data_path)
 
-        for _, row in tqdm(
+        for index, row in tqdm(
             musiccap_data.iterrows(),
             total=len(musiccap_data),
             desc=f"Loading MusicCap {split} {subjective_metric} data",
         ):
+            text_id: str = f"{split}_{subjective_metric}_{index}"
             text: str = row["Text"]
             model: str = row["Model"]
             file_name: str = row["File Name"]
@@ -133,6 +138,7 @@ class TTADataset(Dataset):
             self.database.append(
                 {
                     "dataset": "musiccap",
+                    "text_id": text_id,
                     "audio_file_path": os.path.join(
                         self.data_dir, "human_eval", "music", model, f"{file_name}.wav"
                     ),
@@ -179,20 +185,31 @@ class TTADataset(Dataset):
         data["audio"] = self._load_wav(data["audio_file_path"])
 
         # load pre-extracted features if exist
-        file_name = os.path.basename(data["audio_file_path"]).replace(".wav", ".pt")
+        text_file_name = f"{data['text_id']}.pt"
+        audio_file_name = os.path.basename(data["audio_file_path"]).replace(
+            ".wav", ".pt"
+        )
         dataset_name = data["dataset"]
 
         data["msclap_audio"] = self._load_pre_extracted_feats(
-            feats_name="msclap_audio", dataset_name=dataset_name, file_name=file_name
+            feats_name="msclap_audio",
+            dataset_name=dataset_name,
+            file_name=audio_file_name,
         )
         data["msclap_text"] = self._load_pre_extracted_feats(
-            feats_name="msclap_text", dataset_name=dataset_name, file_name=file_name
+            feats_name="msclap_text",
+            dataset_name=dataset_name,
+            file_name=text_file_name,
         )
         data["laionclap_audio"] = self._load_pre_extracted_feats(
-            feats_name="laionclap_audio", dataset_name=dataset_name, file_name=file_name
+            feats_name="laionclap_audio",
+            dataset_name=dataset_name,
+            file_name=audio_file_name,
         )
         data["laionclap_text"] = self._load_pre_extracted_feats(
-            feats_name="laionclap_text", dataset_name=dataset_name, file_name=file_name
+            feats_name="laionclap_text",
+            dataset_name=dataset_name,
+            file_name=text_file_name,
         )
         return data
 
@@ -202,6 +219,3 @@ if __name__ == "__main__":
     print(f"len(dataset)): {len(dataset)}")
     data = dataset[0]
     print(f"data.keys(): {data.keys()}")
-    print(f"data['audio'].shape: {data['audio'].shape}")
-    print(f"data['audio_feats'].shape: {data['audio_feats'].shape}")
-    print(f"data['text_feats'].shape: {data['text_feats'].shape}")
