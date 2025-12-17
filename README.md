@@ -119,6 +119,23 @@ score,pred
 |-------|------:|----------:|-----------:|------------:|
 | [Microsoft CLAP](https://github.com/microsoft/CLAP) | 49.5852 | 0.1119 | 0.1055 | 0.0759 |
 | [Laion CLAP](https://github.com/LAION-AI/CLAP)      | 50.3553 | 0.1282 | 0.1253 | 0.0901 |
+| [PAM](https://github.com/soham97/pam) | 53.9596 | -0.0238 | -0.0207 | -0.0149 |
+| **Ours**        | **XXX** | **XXX** | **XXX** | **XXX** |
+
+### AudioCap (REL)
+| Model | MSE ↓ | Pearson ↑ | Spearman ↑ | Kendall τ ↑ |
+|-------|------:|----------:|-----------:|------------:|
+| [Microsoft CLAP](https://github.com/microsoft/CLAP) | 9.2164 | 0.1338 | 0.1494 | 0.1025 |
+| [Laion CLAP](https://github.com/LAION-AI/CLAP)      | 10.0086 | 0.2137 | 0.2193 | 0.1491 |
+| [PAM](https://github.com/soham97/pam) | 9.9202 | -0.0305 | -0.0788 | -0.0517 |
+| **Ours**        | **XXX** | **XXX** | **XXX** | **XXX** |
+
+### MusicCap (REL)
+| Model | MSE ↓ | Pearson ↑ | Spearman ↑ | Kendall τ ↑ |
+|-------|------:|----------:|-----------:|------------:|
+| [Microsoft CLAP](https://github.com/microsoft/CLAP) | 8.6641 | 0.1435 | 0.1389 | 0.0954 |
+| [Laion CLAP](https://github.com/LAION-AI/CLAP)      | 9.3944 | 0.1681 | 0.1610 | 0.1119 |
+| [PAM](https://github.com/soham97/pam) | 8.8781 | 0.0537 | 0.0496 | 0.0340 |
 | **Ours**        | **XXX** | **XXX** | **XXX** | **XXX** |
 
 ### RELATE (OVL)
@@ -128,25 +145,12 @@ score,pred
 | [Laion CLAP](https://github.com/LAION-AI/CLAP)      | XXX | XXX | XXX | XXX |
 | **Ours**        | **XXX** | **XXX** | **XXX** | **XXX** |
 
-### AudioCap (REL)
-| Model | MSE ↓ | Pearson ↑ | Spearman ↑ | Kendall τ ↑ |
-|-------|------:|----------:|-----------:|------------:|
-| [Microsoft CLAP](https://github.com/microsoft/CLAP) | 9.2164 | 0.1338 | 0.1494 | 0.1025 |
-| [Laion CLAP](https://github.com/LAION-AI/CLAP)      | 10.0086 | 0.2137 | 0.2193 | 0.1491 |
-| **Ours**        | **XXX** | **XXX** | **XXX** | **XXX** |
-
-### MusicCap (REL)
-| Model | MSE ↓ | Pearson ↑ | Spearman ↑ | Kendall τ ↑ |
-|-------|------:|----------:|-----------:|------------:|
-| [Microsoft CLAP](https://github.com/microsoft/CLAP) | 8.6641 | 0.1435 | 0.1389 | 0.0954 |
-| [Laion CLAP](https://github.com/LAION-AI/CLAP)      | 9.3944 | 0.1681 | 0.1610 | 0.1119 |
-| **Ours**        | **XXX** | **XXX** | **XXX** | **XXX** |
-
 ### AudioCap (OVL)
 | Model | MSE ↓ | Pearson ↑ | Spearman ↑ | Kendall τ ↑ |
 |-------|------:|----------:|-----------:|------------:|
 | [Microsoft CLAP](https://github.com/microsoft/CLAP) | 7.3574 |  0.0653 | 0.0903 | 0.0619 |
 | [Laion CLAP](https://github.com/LAION-AI/CLAP)      | 8.0730 | 0.1240 | 0.1360 | 0.0925 |
+| [PAM](https://github.com/soham97/pam) | 7.9779 | -0.0553 | -0.0949 | -0.0667 |
 | **Ours**        | **XXX** | **XXX** | **XXX** | **XXX** |
 
 ### MusicCap (OVL)
@@ -154,13 +158,11 @@ score,pred
 |-------|------:|----------:|-----------:|------------:|
 | [Microsoft CLAP](https://github.com/microsoft/CLAP) |8.6641 | 0.1435 | 0.1389 | 0.0954 |
 | [Laion CLAP](https://github.com/LAION-AI/CLAP)      | 6.2945 | 0.0482 | 0.0502 | 0.0329 |
+| [PAM](https://github.com/soham97/pam) | 5.8532 | 0.0235 | 0.0290 | 0.0198 |
 | **Ours**        | **XXX** | **XXX** | **XXX** | **XXX** |
 
 ## 用語集
-
 | 用語 | 説明 |
 |------|------|
-| OVL | 音声の音質評価 |
-| REL | 音声キャプションの類似度評価 |
-| OS | 音声キャプションの一貫性評価指標 |
-| IS | 音声キャプションの多様性評価指標 |
+| OVL | Audioの音質評価 |
+| REL | Audio-キャプション間の類似度評価 |
