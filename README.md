@@ -114,13 +114,6 @@ score,pred
 
 ## 定量結果
 
-### ALL DATASETS (REL)
-| Model | MSE ↓ | Pearson ↑ | Spearman ↑ | Kendall τ ↑ |
-|-------|------:|----------:|-----------:|------------:|
-| [Microsoft CLAP](https://github.com/microsoft/CLAP) | 41.29 | 0.266 | 0.246 | 0.174 |
-| [Laion CLAP](https://github.com/LAION-AI/CLAP) | 42.10 | 0.316 | 0.299 | 0.210 |
-| Ours | XXX | XXX | XXX | XXX |
-
 ### RELATE (REL)
 | Model | MSE ↓ | Pearson ↑ | Spearman ↑ | Kendall τ ↑ |
 |-------|------:|----------:|-----------:|------------:|
