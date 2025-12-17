@@ -1,6 +1,12 @@
 # TTAEval
 
-TextToAudio（Audio生成）の評価を行うためのツールキット。
+Text-to-Audio生成モデルの評価を行うためのツールキット。人間の主観評価スコア（REL/OVL）との相関を測定します。
+
+## 特徴
+
+- **複数のCLAPモデル対応**: Microsoft CLAP、LAION CLAPの埋め込み特徴量を使用
+- **複数の評価指標**: MSE、Pearson、Spearman、Kendall's τ
+- **複数データセット対応**: RELATE、AudioCap、MusicCap
 
 ## インストール
 
@@ -61,6 +67,14 @@ data/
 
 ## 使い方
 
+### 特徴量の事前抽出
+
+テストを実行する前に、CLAP特徴量を事前に抽出しておく必要があります。
+
+```bash
+uv run python src/preprocess.py
+```
+
 ### 学習
 
 ```bash
@@ -70,37 +84,58 @@ uv run python src/main.py train --data_dir data --epochs 10 --bs 32 --lr 1e-4
 ### テスト
 
 ```bash
+# 全データセット・全指標でテスト
 uv run python src/main.py test --data_dir data
+
+# 特定のデータセット・指標を指定
+uv run python src/main.py test --data_dir data \
+    --subjective_metrics REL OVL \
+    --test_dataset_names relate audiocap musiccap
+
+# 結果をJSONで保存
+uv run python src/main.py test --data_dir data --save_qualitative
+```
+
+### lint チェック
+
+```bash
+uv run ruff check # チェックのみ
+uv run ruff check --fix # 自動修正
 ```
 
 ### コマンドライン引数
 
 | 引数 | デフォルト | 説明 |
 |------|------------|------|
-| `mode` | `train` | 実行モード（`train` or `test`） |
+| `mode` | - | 実行モード（`train` or `test`） |
 | `--data_dir` | `data` | データセットのディレクトリ |
 | `--model_dir` | `models` | モデルの保存/読み込みディレクトリ |
 | `--bs` | `32` | バッチサイズ |
 | `--lr` | `1e-4` | 学習率 |
 | `--epochs` | `10` | エポック数 |
+| `--subjective_metrics` | `REL OVL` | 評価する主観指標（`REL`, `OVL`） |
+| `--test_dataset_names` | `relate audiocap musiccap` | テストするデータセット名 |
 | `--log_wandb` | `False` | Weights & Biasesへのログを有効化 |
-| `--save_qualitative` | `False` | テスト結果をCSVで保存 |
+| `--save_qualitative` | `False` | テスト結果をJSONで保存 |
 
 ### 出力
 
-テスト実行時、以下の評価指標が出力されます：
+テスト実行時、各データセット・指標ごとに評価結果が出力されます。
 
-```
-mse, pearson, spearman, kendall_tau = 0.123, 0.456, 0.789, 0.654
-```
+`--save_qualitative` オプションを指定すると、`{model_dir}/qualitative_results.json` に予測結果とメタデータが保存されます：
 
-`--save_qualitative` オプションを指定すると、`{model_dir}/test_results.csv` に予測結果が保存されます：
-
-```csv
-score,pred
-0.85,0.82
-0.72,0.75
-...
+```json
+{
+  "metrics": {
+    "REL": {
+      "relate": {"mse": 0.123, "pearson": 0.456, ...},
+      "audiocap": {...}
+    }
+  },
+  "predictions": [...],
+  "scores": [...],
+  "meta_data": {"timestamp": "...", "git_commit": "..."}
+}
 ```
 
 ## 評価指標
@@ -112,57 +147,70 @@ score,pred
 | Spearman | スピアマンの順位相関係数 |
 | Kendall's τ | ケンドールの順位相関係数 |
 
-## 定量結果
+## ベースライン結果
 
-### RELATE (REL)
+### REL（Audio-キャプション間の類似度評価）
+
+#### RELATE Dataset
 | Model | MSE ↓ | Pearson ↑ | Spearman ↑ | Kendall τ ↑ |
 |-------|------:|----------:|-----------:|------------:|
 | [Microsoft CLAP](https://github.com/microsoft/CLAP) | 49.5852 | 0.1119 | 0.1055 | 0.0759 |
-| [Laion CLAP](https://github.com/LAION-AI/CLAP)      | 50.3553 | 0.1282 | 0.1253 | 0.0901 |
-| [PAM](https://github.com/soham97/pam) | 53.9596 | -0.0238 | -0.0207 | -0.0149 |
-| **Ours**        | **XXX** | **XXX** | **XXX** | **XXX** |
+| [LAION CLAP](https://github.com/LAION-AI/CLAP) | 50.3553 | 0.1282 | 0.1253 | 0.0901 |
+| [PAM](https://github.com/soham97/PAM) | 53.9596 | -0.0238 | -0.0207 | -0.0149 |
 
-### AudioCap (REL)
+#### AudioCap Dataset
 | Model | MSE ↓ | Pearson ↑ | Spearman ↑ | Kendall τ ↑ |
 |-------|------:|----------:|-----------:|------------:|
 | [Microsoft CLAP](https://github.com/microsoft/CLAP) | 9.2164 | 0.1338 | 0.1494 | 0.1025 |
-| [Laion CLAP](https://github.com/LAION-AI/CLAP)      | 10.0086 | 0.2137 | 0.2193 | 0.1491 |
-| [PAM](https://github.com/soham97/pam) | 9.9202 | -0.0305 | -0.0788 | -0.0517 |
-| **Ours**        | **XXX** | **XXX** | **XXX** | **XXX** |
+| [LAION CLAP](https://github.com/LAION-AI/CLAP) | 10.0086 | 0.2137 | 0.2193 | 0.1491 |
+| [PAM](https://github.com/soham97/PAM) | 9.9202 | -0.0305 | -0.0788 | -0.0517 |
 
-### MusicCap (REL)
+#### MusicCap Dataset
 | Model | MSE ↓ | Pearson ↑ | Spearman ↑ | Kendall τ ↑ |
 |-------|------:|----------:|-----------:|------------:|
 | [Microsoft CLAP](https://github.com/microsoft/CLAP) | 8.6641 | 0.1435 | 0.1389 | 0.0954 |
-| [Laion CLAP](https://github.com/LAION-AI/CLAP)      | 9.3944 | 0.1681 | 0.1610 | 0.1119 |
-| [PAM](https://github.com/soham97/pam) | 8.8781 | 0.0537 | 0.0496 | 0.0340 |
-| **Ours**        | **XXX** | **XXX** | **XXX** | **XXX** |
+| [LAION CLAP](https://github.com/LAION-AI/CLAP) | 9.3944 | 0.1681 | 0.1610 | 0.1119 |
+| [PAM](https://github.com/soham97/PAM) | 8.8781 | 0.0537 | 0.0496 | 0.0340 |
 
-### RELATE (OVL)
+### OVL（Audio音質評価）
+
+#### AudioCap Dataset
 | Model | MSE ↓ | Pearson ↑ | Spearman ↑ | Kendall τ ↑ |
 |-------|------:|----------:|-----------:|------------:|
-| [Microsoft CLAP](https://github.com/microsoft/CLAP) | XXX | XXX | XXX | XXX |
-| [Laion CLAP](https://github.com/LAION-AI/CLAP)      | XXX | XXX | XXX | XXX |
-| **Ours**        | **XXX** | **XXX** | **XXX** | **XXX** |
+| [Microsoft CLAP](https://github.com/microsoft/CLAP) | 7.3574 | 0.0653 | 0.0903 | 0.0619 |
+| [LAION CLAP](https://github.com/LAION-AI/CLAP) | 8.0730 | 0.1240 | 0.1360 | 0.0925 |
+| [PAM](https://github.com/soham97/PAM) | 7.9779 | -0.0553 | -0.0949 | -0.0667 |
 
-### AudioCap (OVL)
+#### MusicCap Dataset
 | Model | MSE ↓ | Pearson ↑ | Spearman ↑ | Kendall τ ↑ |
 |-------|------:|----------:|-----------:|------------:|
-| [Microsoft CLAP](https://github.com/microsoft/CLAP) | 7.3574 |  0.0653 | 0.0903 | 0.0619 |
-| [Laion CLAP](https://github.com/LAION-AI/CLAP)      | 8.0730 | 0.1240 | 0.1360 | 0.0925 |
-| [PAM](https://github.com/soham97/pam) | 7.9779 | -0.0553 | -0.0949 | -0.0667 |
-| **Ours**        | **XXX** | **XXX** | **XXX** | **XXX** |
-
-### MusicCap (OVL)
-| Model | MSE ↓ | Pearson ↑ | Spearman ↑ | Kendall τ ↑ |
-|-------|------:|----------:|-----------:|------------:|
-| [Microsoft CLAP](https://github.com/microsoft/CLAP) |8.6641 | 0.1435 | 0.1389 | 0.0954 |
-| [Laion CLAP](https://github.com/LAION-AI/CLAP)      | 6.2945 | 0.0482 | 0.0502 | 0.0329 |
-| [PAM](https://github.com/soham97/pam) | 5.8532 | 0.0235 | 0.0290 | 0.0198 |
-| **Ours**        | **XXX** | **XXX** | **XXX** | **XXX** |
+| [Microsoft CLAP](https://github.com/microsoft/CLAP) | 8.6641 | 0.1435 | 0.1389 | 0.0954 |
+| [LAION CLAP](https://github.com/LAION-AI/CLAP) | 6.2945 | 0.0482 | 0.0502 | 0.0329 |
+| [PAM](https://github.com/soham97/PAM) | 5.8532 | 0.0235 | 0.0290 | 0.0198 |
 
 ## 用語集
+
 | 用語 | 説明 |
 |------|------|
-| OVL | Audioの音質評価 |
-| REL | Audio-キャプション間の類似度評価 |
+| REL | Relevance - Audio-キャプション間の類似度評価 |
+| OVL | Overall Quality - Audioの音質評価 |
+| CLAP | Contrastive Language-Audio Pretraining |
+
+## プロジェクト構成
+
+```
+src/
+├── main.py          # エントリーポイント・学習/テストの実行
+├── model.py         # AudioTextSimilarityModel（cosine類似度）
+├── dataset.py       # TTADataset（RELATE/AudioCap/MusicCap対応）
+├── preprocess.py    # CLAP特徴量の事前抽出
+└── utils/
+    └── eval_methods.py  # 評価指標（MSE, Pearson, Spearman, Kendall）
+```
+
+## 参考文献
+
+- [RELATE](https://github.com/sarulab-speech/RELATE) - 音声キャプション評価用データセット
+- [PAM](https://github.com/soham97/PAM) - Perceptual Audio Metric
+- [Microsoft CLAP](https://github.com/microsoft/CLAP)
+- [LAION CLAP](https://github.com/LAION-AI/CLAP)
