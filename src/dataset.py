@@ -13,7 +13,11 @@ class TTADataset(Dataset):
         self,
         data_dir: str,
         subjective_metrics: list[Literal["REL", "OVL"]] = ["REL", "OVL"],
-        dataset_names: list[str] = ["relate", "audiocap", "musiccap"],
+        dataset_names: list[Literal["relate", "audiocap", "musiccap"]] = [
+            "relate",
+            "audiocap",
+            "musiccap",
+        ],
         split: Literal["train", "val", "test"] = "train",
         bitrate: int = 16000,
         max_len: int = 160000 * 10,
@@ -21,22 +25,19 @@ class TTADataset(Dataset):
     ):
         """Initialize TTADataset with specified data directory and split."""
         self.data_dir = data_dir
-        self.split = split
         self.bitrate = bitrate
         self.max_len = max_len
         self.dtype = dtype
         self.database = []
         for subjective_metric in subjective_metrics:
             if "relate" in dataset_names:
-                self._load_relate_data(subjective_metric)
-            elif "audiocap" in dataset_names:
-                self._load_audiocap_data(subjective_metric)
-            elif "musiccap" in dataset_names:
-                self._load_musiccap_data(subjective_metric)
-            else:
-                raise ValueError(f"Unsupported dataset_name: {dataset_names}")
+                self._load_relate_data(split, subjective_metric)
+            if "audiocap" in dataset_names:
+                self._load_audiocap_data(split, subjective_metric)
+            if "musiccap" in dataset_names:
+                self._load_musiccap_data(split, subjective_metric)
 
-    def _load_relate_data(self, subjective_metric) -> None:
+    def _load_relate_data(self, split: str, subjective_metric: str) -> None:
         """Load RELATE dataset and split into train, val, test sets."""
         if subjective_metric != "REL":
             # RELATE dataset only supports REL subjective metric
@@ -45,13 +46,16 @@ class TTADataset(Dataset):
         relate_rel_path = os.path.join(self.data_dir, "RELATE", "scores", "REL.csv")
         relate_rel_data = pd.read_csv(relate_rel_path)
 
-        if self.split == "train" or self.split == "test":
-            data = relate_rel_data[relate_rel_data["in RELATE dataset"] == self.split]
-        elif self.split == "val":
+        if split == "train" or split == "test":
+            data = relate_rel_data[relate_rel_data["in RELATE dataset"] == split]
+        elif split == "val":
             data = relate_rel_data[relate_rel_data["in RELATE dataset"] == "validation"]
         data = data.reset_index(drop=True)
+
         for _, row in tqdm(
-            data.iterrows(), total=len(data), desc=f"Loading {self.split} data"
+            data.iterrows(),
+            total=len(data),
+            desc=f"Loading RELATE {split} {subjective_metric} data",
         ):
             wavname: str = row["wavname"]
             text: str = row["text"]
@@ -61,7 +65,7 @@ class TTADataset(Dataset):
                 self.data_dir,
                 "wav",
                 "audiocaps",
-                self.split if self.split != "val" else "test",
+                split if split != "val" else "test",
                 f"{wavname.split('/')[-1]}",
             )
             if not os.path.exists(audio_file_path):
@@ -78,9 +82,9 @@ class TTADataset(Dataset):
                 }
             )
 
-    def _load_audiocap_data(self, subjective_metric) -> None:
+    def _load_audiocap_data(self, split: str, subjective_metric: str) -> None:
         """Load AudioCap dataset as test sets."""
-        if self.split != "test":
+        if split != "test":
             return
         audiocap_data_path = os.path.join(
             self.data_dir, "human_eval", "audio", "scores.csv"
@@ -90,7 +94,7 @@ class TTADataset(Dataset):
         for _, row in tqdm(
             audiocap_data.iterrows(),
             total=len(audiocap_data),
-            desc="Loading AudioCap data",
+            desc=f"Loading AudioCap {split} {subjective_metric} data",
         ):
             text: str = row["Text"]
             model: str = row["Model"]
@@ -108,9 +112,9 @@ class TTADataset(Dataset):
                 }
             )
 
-    def _load_musiccap_data(self, subjective_metric) -> None:
+    def _load_musiccap_data(self, split: str, subjective_metric: str) -> None:
         """Load MusicCap music dataset as test sets."""
-        if self.split != "test":
+        if split != "test":
             return
         musiccap_data_path = os.path.join(
             self.data_dir, "human_eval", "music", "scores.csv"
@@ -120,7 +124,7 @@ class TTADataset(Dataset):
         for _, row in tqdm(
             musiccap_data.iterrows(),
             total=len(musiccap_data),
-            desc="Loading MusicCap music data",
+            desc=f"Loading MusicCap {split} {subjective_metric} data",
         ):
             text: str = row["Text"]
             model: str = row["Model"]
