@@ -3,13 +3,11 @@ import torch.nn as nn
 
 
 class AudioTextSimilarityModel(nn.Module):
-    def __init__(
-        self,
-    ):
+    def __init__(self):
         super().__init__()
         embedding_dim = 512
         self.cls_token = nn.Parameter(torch.randn(1, 1, embedding_dim))
-        self.transformer = nn.TransformerEncoderLayer(
+        encoder_layer = nn.TransformerEncoderLayer(
             d_model=embedding_dim,
             nhead=8,
             dim_feedforward=2048,
@@ -17,6 +15,7 @@ class AudioTextSimilarityModel(nn.Module):
             activation="relu",
             batch_first=True,
         )
+        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=4)
         self.prediction_head = nn.Linear(embedding_dim, 1)
 
     def forward(

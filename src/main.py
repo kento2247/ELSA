@@ -118,8 +118,7 @@ class TTAEval:
                 print(f"Running test at epoch {epoch}...")
                 self.test()
 
-        self.save_model("final_model.pt")
-        print("Training completed. Final model saved.")
+        print("Training completed. ")
 
     def _train_epoch(self, epoch: int, train_loader: DataLoader) -> float:
         """Train for one epoch and return average loss."""
