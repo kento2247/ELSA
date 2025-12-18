@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 
-class AudioTextSimilarityModel(nn.Module):
+class TTAEvalModel(nn.Module):
     def __init__(self):
         super().__init__()
         embedding_dim = 512
@@ -10,7 +10,7 @@ class AudioTextSimilarityModel(nn.Module):
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=embedding_dim,
             nhead=8,
-            dim_feedforward=2048,
+            dim_feedforward=embedding_dim * 4,
             dropout=0.1,
             activation="relu",
             batch_first=True,
@@ -40,8 +40,8 @@ class AudioTextSimilarityModel(nn.Module):
                 cls_tokens,
                 hadamard_product.unsqueeze(1),
                 diff.unsqueeze(1),
-                audio_feats.unsqueeze(1),
-                text_feats.unsqueeze(1),
+                # audio_feats.unsqueeze(1),
+                # text_feats.unsqueeze(1),
             ],
             dim=1,
         )  # [B, 5, D]

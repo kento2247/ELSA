@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 import wandb
 from dataset import TTADataset
-from model import AudioTextSimilarityModel
+from model import TTAEvalModel
 from utils.eval_methods import (
     kendall_tau,
     mse,
@@ -57,7 +57,7 @@ class TTAEval:
         self.save_qualitative = save_qualitative
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model = AudioTextSimilarityModel().to(self.device)
+        self.model = TTAEvalModel().to(self.device)
 
         self.meta_data = {
             "timestamp": time.strftime("%Y%m%d-%H%M%S"),
@@ -100,7 +100,7 @@ class TTAEval:
             if self.log_wandb:
                 wandb.log({"epoch": epoch, "train_loss": train_loss})
 
-            if epoch % self.eval_freq == 0:
+            if (epoch - 1) % self.eval_freq == 0:
                 val_metrics = self.evaluate(val_loader, desc="Validation")
                 print(f"Epoch {epoch}/{self.epochs} - Val Metrics: {val_metrics}")
 
