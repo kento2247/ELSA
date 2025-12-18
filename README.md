@@ -78,7 +78,7 @@ uv run python src/preprocess.py
 ### 学習
 
 ```bash
-uv run python src/main.py train --data_dir data --epochs 10 --bs 32 --lr 1e-4
+uv run python src/main.py train --data_dir data --epochs 30 --batch_size 32 --lr 1e-4
 ```
 
 ### テスト
@@ -110,9 +110,11 @@ uv run ruff check --fix # 自動修正
 | `mode` | - | 実行モード（`train` or `test`） |
 | `--data_dir` | `data` | データセットのディレクトリ |
 | `--model_dir` | `models` | モデルの保存/読み込みディレクトリ |
-| `--bs` | `32` | バッチサイズ |
+| `--batch_size` | `32` | バッチサイズ |
 | `--lr` | `1e-4` | 学習率 |
-| `--epochs` | `10` | エポック数 |
+| `--epochs` | `30` | エポック数 |
+| `--eval_freq` | `5` | 評価頻度（エポック単位） |
+| `--main_metric` | `kendall_tau` | モデル選択の主指標（`mse`, `pearson`, `spearman`, `kendall_tau`） |
 | `--subjective_metrics` | `REL OVL` | 評価する主観指標（`REL`, `OVL`） |
 | `--test_dataset_names` | `relate audiocap musiccap` | テストするデータセット名 |
 | `--log_wandb` | `False` | Weights & Biasesへのログを有効化 |
@@ -201,7 +203,8 @@ src/
 ├── dataset.py       # TTADataset（RELATE/AudioCap/MusicCap対応）
 ├── preprocess.py    # CLAP特徴量の事前抽出
 └── utils/
-    └── eval_methods.py  # 評価指標（MSE, Pearson, Spearman, Kendall）
+    ├── eval_methods.py  # 評価指標（MSE, Pearson, Spearman, Kendall）
+    └── lb_output.py     # リーダーボード出力フォーマット
 ```
 
 ## 参考文献
