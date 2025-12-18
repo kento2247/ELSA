@@ -22,12 +22,14 @@ class TTADataset(Dataset):
         bitrate: int = 16000,
         max_len: int = 160000 * 10,
         dtype: torch.dtype = torch.float32,
+        pre_load_features: bool = False,
     ):
         """Initialize TTADataset with specified data directory and split."""
         self.data_dir = data_dir
         self.bitrate = bitrate
         self.max_len = max_len
         self.dtype = dtype
+        self.pre_load_features = pre_load_features
         self.database = []
         for subjective_metric in subjective_metrics:
             if "relate" in dataset_names:
@@ -36,6 +38,13 @@ class TTADataset(Dataset):
                 self._load_audiocap_data(split, subjective_metric)
             if "musiccap" in dataset_names:
                 self._load_musiccap_data(split, subjective_metric)
+
+        if pre_load_features:
+            for i in tqdm(
+                range(len(self.database)),
+                desc="Pre-loading pre-extracted features into memory",
+            ):
+                self.database[i] = self._load_features(self.database[i])
 
     def _load_relate_data(self, split: str, subjective_metric: str) -> None:
         """Load RELATE dataset and split into train, val, test sets."""
@@ -179,18 +188,15 @@ class TTADataset(Dataset):
         feats = torch.load(feat_path, map_location="cpu")
         return feats.to(self.dtype)
 
-    def __getitem__(self, idx):
-        """Get item by index from the dataset."""
-        data = self.database[idx]
-        data["audio"] = self._load_wav(data["audio_file_path"])
-
-        # load pre-extracted features if exist
+    def _load_features(self, data):
+        """Pre-load all features into memory to speed up data loading."""
         text_file_name = f"{data['text_id']}.pt"
         audio_file_name = os.path.basename(data["audio_file_path"]).replace(
             ".wav", ".pt"
         )
         dataset_name = data["dataset"]
 
+        # data["audio"] = self._load_wav(data["audio_file_path"])
         data["msclap_audio"] = self._load_pre_extracted_feats(
             feats_name="msclap_audio",
             dataset_name=dataset_name,
@@ -213,9 +219,16 @@ class TTADataset(Dataset):
         )
         return data
 
+    def __getitem__(self, idx):
+        """Get item by index from the dataset."""
+        if self.pre_load_features:
+            return self.database[idx]
+        else:
+            return self._load_features(self.database[idx])
+
 
 if __name__ == "__main__":
     dataset = TTADataset(data_dir="data", split="train")
     print(f"len(dataset)): {len(dataset)}")
-    data = dataset[0]
+    data = dataset.__getitem__(0)
     print(f"data.keys(): {data.keys()}")

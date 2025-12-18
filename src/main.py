@@ -260,10 +260,10 @@ def parse_args():
     )
     # training params
     parser.add_argument("--batch_size", type=int, default=32, help="Batch size")
-    parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
+    parser.add_argument("--lr", type=float, default=1e-5, help="Learning rate")
     parser.add_argument("--epochs", type=int, default=30, help="Number of epochs")
     parser.add_argument(
-        "--eval_freq", type=int, default=5, help="Evaluation frequency (in epochs)"
+        "--eval_freq", type=int, default=3, help="Evaluation frequency (in epochs)"
     )
     parser.add_argument(
         "--main_metric",
