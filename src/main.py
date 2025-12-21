@@ -327,7 +327,6 @@ if __name__ == "__main__":
 
     if args.mode == "train":
         evaluator.train()
-        evaluator.test()
     elif args.mode == "test":
         evaluator.load_model("best_model.pt")
         evaluator.test()
