@@ -63,11 +63,10 @@ class TTAEval:
             "timestamp": time.strftime("%Y%m%d-%H%M%S"),
             "git_branch": os.popen("git rev-parse --abbrev-ref HEAD").read().strip(),
             "git_commit": os.popen("git rev-parse HEAD").read().strip(),
-            "run_command": " ".join(os.sys.argv),
+            "run_command": "uv run " + " ".join(os.sys.argv),
         }
         if self.log_wandb:
             wandb.init(project="TTAEval")
-            self.meta_data["wandb_run_id"] = wandb.run.id
             self.meta_data["wandb_url"] = wandb.run.url
 
     def train(self):
@@ -91,7 +90,9 @@ class TTAEval:
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
         self.criterion = torch.nn.MSELoss()
 
+        best_epoch = -1
         best_val_metric = float("-inf")
+        best_test_metrics = None
 
         for epoch in range(1, self.epochs + 1):
             train_loss = self._train_epoch(epoch, train_loader)
@@ -107,18 +108,23 @@ class TTAEval:
                 if self.log_wandb:
                     wandb.log({"epoch": epoch, "val": val_metrics})
 
+                print(f"Running test at epoch {epoch}...")
+                test_metrics = self.test()
+
                 val_metric = val_metrics[self.main_metric]
                 if val_metric > best_val_metric:
                     best_val_metric = val_metric
+                    best_epoch = epoch
                     self.save_model("best_model.pt")
                     print(
                         f"Best model saved with val_{self.main_metric}: {val_metric:.4f}"
                     )
+                    best_test_metrics = test_metrics
 
-                print(f"Running test at epoch {epoch}...")
-                self.test()
-
-        print("Training completed. ")
+        print(f"Training completed. Best epoch: {best_epoch}")
+        lb_text = format_leaderboard_text(self.meta_data, best_test_metrics)
+        print(f"Best Leaderboard Text:\n{lb_text}")
+        return best_test_metrics
 
     def _train_epoch(self, epoch: int, train_loader: DataLoader) -> float:
         """Train for one epoch and return average loss."""
@@ -207,15 +213,11 @@ class TTAEval:
         if self.log_wandb:
             wandb.log(metrics)
 
-        lb_text = format_leaderboard_text(metrics)
-        print(f"Leaderboard Text:\n{lb_text}")
-
         if self.save_qualitative:
             os.makedirs(self.model_dir, exist_ok=True)
             qualitative_data = {
                 "metrics": metrics,
                 "meta_data": self.meta_data,
-                "lb_text": lb_text,
             }
             qualitative_path = os.path.join(self.model_dir, "qualitative_results.json")
             with open(qualitative_path, "w") as f:
@@ -291,6 +293,7 @@ def parse_args():
     parser.add_argument(
         "--log_wandb",
         action="store_true",
+        default=True,
         help="Whether to log training with Weights & Biases",
     )
     parser.add_argument(
