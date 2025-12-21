@@ -24,18 +24,18 @@ class TTAPreprocessDataset(TTADataset):
 class MSClapEmbedder:
     def __init__(self, dtype: torch.dtype = torch.float32):
         self.model = CLAP(version="2023", use_cuda=True)
-        self.max_text_len = 77  # MSCLAPのテキスト最大長
+        self.max_text_len = 77  # MSCLAP max text length
         self.dtype = dtype
 
     def embed_texts(self, texts: list[str]) -> torch.Tensor:
-        """テキストをバッチで埋め込む"""
+        """Embed texts in batch"""
         truncated_texts = [t[: self.max_text_len] for t in texts]
         with torch.no_grad():
             text_embeddings = self.model.get_text_embeddings(truncated_texts)
         return text_embeddings.to(self.dtype)
 
     def embed_audios(self, audio_files: list[str]) -> torch.Tensor:
-        """オーディオをバッチで埋め込む"""
+        """Embed audios in batch"""
         with torch.no_grad():
             audio_embeddings = self.model.get_audio_embeddings(audio_files)
         return audio_embeddings.to(self.dtype)
@@ -45,11 +45,11 @@ class LaionClapEmbedder:
     def __init__(self, dtype: torch.dtype = torch.float32):
         self.model = laion_clap.CLAP_Module(enable_fusion=False)
         self.model.load_ckpt("models/630k-audioset-best.pt")
-        self.max_text_len = 77  # LaionCLAPのテキスト最大長
+        self.max_text_len = 77  # LaionCLAP max text length
         self.dtype = dtype
 
     def embed_texts(self, texts: list[str]) -> torch.Tensor:
-        """テキストをバッチで埋め込む（長いテキストはトランケート）"""
+        """Embed texts in batch (truncate long texts)"""
         truncated_texts = [t[: self.max_text_len] for t in texts]
         with torch.no_grad():
             text_embeddings = self.model.get_text_embedding(
@@ -58,7 +58,7 @@ class LaionClapEmbedder:
         return text_embeddings.to(self.dtype)
 
     def embed_audios(self, audio_files: list[str]) -> torch.Tensor:
-        """オーディオをバッチで埋め込む"""
+        """Embed audios in batch"""
         with torch.no_grad():
             audio_embeddings = self.model.get_audio_embedding_from_filelist(
                 x=audio_files, use_tensor=True
@@ -80,7 +80,7 @@ class QwenTextParser:
         self.model.to(self.device)
 
     def _build_chat_template(self, text: str) -> str:
-        """テキストからチャットテンプレートを構築する"""
+        """Build chat template from text"""
         system_prompt = "You are a function that outputs ONLY valid JSON."
         user_prompt = f"""
             Split the audio caption into sound-source units.
@@ -89,7 +89,7 @@ class QwenTextParser:
             {text}
 
             Return ONLY this JSON schema:
-            {{["string"]}}
+            {{["unit1", "unit2", ...]}}
             """
         messages = [
             {"role": "system", "content": system_prompt},
@@ -102,41 +102,75 @@ class QwenTextParser:
         )
 
     def _normalize_output(self, result_text: str) -> str:
-        """出力テキストを正規化する（リスト形式に変換）"""
+        """Normalize output text (convert to list format)"""
         result_text = result_text.strip()
-        # 改行を除去して1行にする
+        # Remove newlines to make single line
         result_text = " ".join(result_text.split())
-        # JSON配列部分を抽出（プレフィックスやサフィックスを除去）
-        start_idx = result_text.find("[")
-        end_idx = result_text.rfind("]")
-        if start_idx != -1 and end_idx != -1:
-            result_text = result_text[start_idx : end_idx + 1]
-        elif not result_text.startswith("["):
+        # Extract and merge all JSON arrays (handle numbered list format)
+        all_items = []
+        idx = 0
+        while idx < len(result_text):
+            start_idx = result_text.find("[", idx)
+            if start_idx == -1:
+                break
+            # Find the matching ] for this [
+            bracket_count = 0
+            end_idx = -1
+            for i, char in enumerate(result_text[start_idx:], start=start_idx):
+                if char == "[":
+                    bracket_count += 1
+                elif char == "]":
+                    bracket_count -= 1
+                    if bracket_count == 0:
+                        end_idx = i
+                        break
+            if end_idx != -1:
+                array_str = result_text[start_idx : end_idx + 1]
+                # Parse each array and extract items
+                try:
+                    items = json.loads(array_str)
+                    if isinstance(items, list):
+                        all_items.extend(items)
+                except json.JSONDecodeError:
+                    # If parsing fails, extract using string processing
+                    fixed = self._fix_unquoted_strings(array_str)
+                    try:
+                        items = json.loads(fixed)
+                        if isinstance(items, list):
+                            all_items.extend(items)
+                    except json.JSONDecodeError:
+                        pass
+                idx = end_idx + 1
+            else:
+                break
+        if all_items:
+            return json.dumps(all_items)
+        # Fallback processing if no arrays found
+        if not result_text.startswith("["):
             result_text = f"[{result_text}]"
-        # クォートなしの文字列をクォートで囲む（例: [engine, steam] -> ["engine", "steam"]）
         result_text = self._fix_unquoted_strings(result_text)
         return result_text
 
     def _fix_unquoted_strings(self, result_text: str) -> str:
-        """クォートなしの文字列をダブルクォートで囲む"""
-        # 余分な { } ( ) を除去
+        """Wrap unquoted strings with double quotes"""
+        # Remove extra { } ( )
         for char in "{}()":
             result_text = result_text.replace(char, "")
-        # 既にパース可能ならそのまま返す
+        # Return as-is if already parseable
         try:
             json.loads(result_text)
             return result_text
         except json.JSONDecodeError:
             pass
-        # [ と ] を除去して中身を取得
+        # Remove [ and ] to get inner content
         inner = result_text[1:-1].strip()
         if not inner:
             return "[]"
-        # カンマで分割し、各要素を処理
+        # Split by comma and process each element
         items = []
         for item in inner.split(","):
             item = item.strip().strip('"').strip("'")
-            # "key": "value" 形式の場合は value 部分のみ取得
+            # For "key": "value" format, get only the value part
             if ":" in item:
                 item = item.split(":")[-1].strip().strip('"').strip("'")
             if item:
@@ -145,7 +179,7 @@ class QwenTextParser:
         return "[" + ", ".join(quoted_items) + "]"
 
     def _parse_json_result(self, result_text: str) -> list:
-        """JSON文字列をパースしてリストに変換する"""
+        """Parse JSON string and convert to list"""
         try:
             result: list = json.loads(result_text)
             if isinstance(result, list):
@@ -160,7 +194,7 @@ class QwenTextParser:
             raise RuntimeError(f"{e}: \n{result_text}")
 
     def _decode_single_response(self, ids: torch.Tensor, input_len: int) -> list:
-        """単一の応答をデコードしてパースする"""
+        """Decode and parse a single response"""
         result_text = self.tokenizer.decode(
             ids[input_len:],
             skip_special_tokens=True,
@@ -357,7 +391,7 @@ def arg_parser():
     parser.add_argument(
         "--bs",
         type=int,
-        default=32,
+        default=48,
         help="Batch size for DataLoader",
     )
     args = parser.parse_args()
