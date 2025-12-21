@@ -196,26 +196,20 @@ class TTADataset(Dataset):
         )
         dataset_name = data["dataset"]
 
-        # data["audio"] = self._load_wav(data["audio_file_path"])
         data["msclap_audio"] = self._load_pre_extracted_feats(
             feats_name="msclap_audio",
             dataset_name=dataset_name,
             file_name=audio_file_name,
         )
-        data["msclap_text"] = self._load_pre_extracted_feats(
-            feats_name="msclap_text",
-            dataset_name=dataset_name,
-            file_name=text_file_name,
+        data["pam_prompt_1"] = self._load_pre_extracted_feats(
+            feats_name="pam_prompts",
+            dataset_name="all",
+            file_name="prompt_1.pt",
         )
-        data["laionclap_audio"] = self._load_pre_extracted_feats(
-            feats_name="laionclap_audio",
-            dataset_name=dataset_name,
-            file_name=audio_file_name,
-        )
-        data["laionclap_text"] = self._load_pre_extracted_feats(
-            feats_name="laionclap_text",
-            dataset_name=dataset_name,
-            file_name=text_file_name,
+        data["pam_prompt_2"] = self._load_pre_extracted_feats(
+            feats_name="pam_prompts",
+            dataset_name="all",
+            file_name="prompt_2.pt",
         )
         return data
 

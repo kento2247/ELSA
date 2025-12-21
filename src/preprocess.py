@@ -328,13 +328,29 @@ def text_parse(dataloader, feats_dir: str):
                 json.dump(sources, f, ensure_ascii=False, indent=0)
 
 
-def main(args):
-    dataset = TTAPreprocessDataset(data_dir=args.data_dir, split=args.split)
-    dataloader = DataLoader(dataset, batch_size=args.bs, shuffle=True)
+def pam_extract(feats_dir: str):
+    prompt_1 = "the sound is clear and clean."
+    prompt_2 = "the sound is noisy and with artifacts."
+    msclap_embedder = MSClapEmbedder()
+    feats = msclap_embedder.embed_texts([prompt_1, prompt_2])
+    save_feats(
+        feats_dir,
+        "pam_prompts",
+        "all",
+        "prompt_1.wav",
+        feats[0],
+    )
+    save_feats(
+        feats_dir,
+        "pam_prompts",
+        "all",
+        "prompt_2.wav",
+        feats[1],
+    )
 
-    msclap_extract(dataloader, args.feats_dir)
-    laionclap_extract(dataloader, args.feats_dir)
-    # text_parse(dataloader, args.feats_dir)
+
+def main(args):
+    pam_extract(args.feats_dir)
 
 
 ### argument parser ###
