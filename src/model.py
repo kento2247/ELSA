@@ -7,7 +7,7 @@ class TTAEvalModel(nn.Module):
         self,
         embedding_dim: int = 512,
         num_heads: int = 8,
-        num_layers: int = 4,
+        num_layers: int = 8,
         dropout: float = 0.1,
     ):
         super().__init__()
