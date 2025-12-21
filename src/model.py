@@ -7,7 +7,7 @@ class TTAEvalModel(nn.Module):
         super().__init__()
         embedding_dim = 512
         self.head_mlp = nn.Sequential(
-            nn.Linear(embedding_dim * 2, embedding_dim),
+            nn.Linear(embedding_dim * 4, embedding_dim),
             nn.ReLU(),
             nn.LayerNorm(embedding_dim),
             nn.Linear(embedding_dim, embedding_dim // 2),
@@ -31,6 +31,8 @@ class TTAEvalModel(nn.Module):
         """
         hadamard_product = audio_feats * text_feats  # [B, D]
         diff = audio_feats - text_feats  # [B, D]
-        feats = torch.cat([hadamard_product, diff], dim=-1)  # [B, D*2]
+        feats = torch.cat(
+            [hadamard_product, diff, audio_feats, text_feats], dim=-1
+        )  # [B, D*2]
         preds = self.head_mlp(feats)  # [B, 1]
         return preds  # [B, 1]

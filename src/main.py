@@ -272,7 +272,7 @@ def parse_args():
     parser.add_argument(
         "--main_metric",
         type=str,
-        default="kendall_tau",
+        default="pearson",
         choices=["mse", "pearson", "spearman", "kendall_tau"],
         help="Main metric for model selection",
     )
