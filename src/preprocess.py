@@ -83,20 +83,14 @@ class QwenTextParser:
         """テキストからチャットテンプレートを構築する"""
         system_prompt = "You are a function that outputs ONLY valid JSON."
         user_prompt = f"""
-        Extract the sound sources likely present in the audio caption below.
+            Split the audio caption into sound-source units.
 
-        Caption:
-        {text}
+            Caption:
+            {text}
 
-        Rules:
-        - DO NOT normalize, summarize, or paraphrase.
-        - Preserve adverbs and intensity modifiers (e.g., softly, loudly, faintly).
-        - Keep the original wording as-is whenever possible.
-        - If a sound includes manner or intensity, include it verbatim.
-
-        Return ONLY this JSON schema:
-        {{["string"]}}
-        """
+            Return ONLY this JSON schema:
+            {{["string"]}}
+            """
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
