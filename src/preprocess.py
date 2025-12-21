@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import re
 
 import laion_clap
 import torch
@@ -81,16 +82,16 @@ class QwenTextParser:
 
     def _build_chat_template(self, text: str) -> str:
         """Build chat template from text"""
-        system_prompt = "You are a function that outputs ONLY valid JSON."
-        user_prompt = f"""
-            Split the audio caption into sound-source units.
+        system_prompt = "Output only a JSON array of strings."
+        user_prompt = f"""Split the caption into separate sound events. Keep all modifiers (adjectives, adverbs, descriptions).
 
-            Caption:
-            {text}
+        Caption: {text}
 
-            Return ONLY this JSON schema:
-            {{["unit1", "unit2", ...]}}
-            """
+        Example:
+        Caption: A large dog barks loudly while heavy rain falls on the metal roof.
+        Output: ["A large dog barks loudly", "heavy rain falls on the metal roof"]
+
+        Output:"""
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
@@ -106,50 +107,26 @@ class QwenTextParser:
         result_text = result_text.strip()
         # Remove newlines to make single line
         result_text = " ".join(result_text.split())
-        # Extract and merge all JSON arrays (handle numbered list format)
-        all_items = []
-        idx = 0
-        while idx < len(result_text):
-            start_idx = result_text.find("[", idx)
-            if start_idx == -1:
-                break
-            # Find the matching ] for this [
-            bracket_count = 0
-            end_idx = -1
-            for i, char in enumerate(result_text[start_idx:], start=start_idx):
-                if char == "[":
-                    bracket_count += 1
-                elif char == "]":
-                    bracket_count -= 1
-                    if bracket_count == 0:
-                        end_idx = i
-                        break
-            if end_idx != -1:
-                array_str = result_text[start_idx : end_idx + 1]
-                # Parse each array and extract items
-                try:
-                    items = json.loads(array_str)
-                    if isinstance(items, list):
-                        all_items.extend(items)
-                except json.JSONDecodeError:
-                    # If parsing fails, extract using string processing
-                    fixed = self._fix_unquoted_strings(array_str)
-                    try:
-                        items = json.loads(fixed)
-                        if isinstance(items, list):
-                            all_items.extend(items)
-                    except json.JSONDecodeError:
-                        pass
-                idx = end_idx + 1
-            else:
-                break
-        if all_items:
-            return json.dumps(all_items)
-        # Fallback processing if no arrays found
-        if not result_text.startswith("["):
-            result_text = f"[{result_text}]"
-        result_text = self._fix_unquoted_strings(result_text)
-        return result_text
+
+        # Extract all quoted strings using regex
+        quoted_strings = re.findall(r'"([^"]*)"', result_text)
+        if quoted_strings:
+            return json.dumps(quoted_strings)
+
+        # Fallback: try to parse as JSON array
+        start_idx = result_text.find("[")
+        end_idx = result_text.rfind("]")
+        if start_idx != -1 and end_idx != -1:
+            array_str = result_text[start_idx : end_idx + 1]
+            try:
+                items = json.loads(array_str)
+                if isinstance(items, list):
+                    return json.dumps(items)
+            except json.JSONDecodeError:
+                pass
+
+        # Last resort: wrap entire text
+        return json.dumps([result_text])
 
     def _fix_unquoted_strings(self, result_text: str) -> str:
         """Wrap unquoted strings with double quotes"""

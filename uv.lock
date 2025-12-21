@@ -971,7 +971,7 @@ wheels = [
 [[package]]
 name = "laion-clap"
 version = "1.1.6"
-source = { git = "https://github.com/LAION-AI/CLAP.git#1fd4c37df5ffbfcfbad5415c170bc66cf94c9994" }
+source = { git = "https://github.com/lematt1991/CLAP.git#b85cb7ecac0af7d064cbf03ebd990e709e959fe7" }
 dependencies = [
     { name = "braceexpand" },
     { name = "ftfy" },
@@ -1695,6 +1695,7 @@ dependencies = [
     { name = "pillow" },
     { name = "pyahocorasick" },
     { name = "pycocoevalcap" },
+    { name = "pynvml" },
     { name = "rouge-score" },
     { name = "sacrebleu" },
     { name = "scikit-learn" },
@@ -2055,6 +2056,18 @@ wheels = [
 ]
 
 [[package]]
+name = "pynvml"
+version = "13.0.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "nvidia-ml-py" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/5c/57/da7dc63a79f59e082e26a66ac02d87d69ea316b35b35b7a00d82f3ce3d2f/pynvml-13.0.1.tar.gz", hash = "sha256:1245991d9db786b4d2f277ce66869bd58f38ac654e38c9397d18f243c8f6e48f", size = 35226, upload-time = "2025-09-05T20:33:25.377Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d7/4a/cac76c174bb439a0c46c9a4413fcbea5c6cabfb01879f7bbdb9fdfaed76c/pynvml-13.0.1-py3-none-any.whl", hash = "sha256:e2b20e0a501eeec951e2455b7ab444759cf048e0e13a57b08049fa2775266aa8", size = 28810, upload-time = "2025-09-05T20:33:24.13Z" },
+]
+
+[[package]]
 name = "pyparsing"
 version = "3.2.5"
 source = { registry = "https://pypi.org/simple" }
@@ -2293,7 +2306,7 @@ wheels = [
 [[package]]
 name = "sam-audio"
 version = "0.1.0"
-source = { git = "https://github.com/facebookresearch/sam-audio.git#d2410f30c301f0925ebd598aeb0c4f02ad482ba1" }
+source = { git = "https://github.com/kento2247/sam-audio.git#b6fc11891d45ba0ae13a7410ccf84154bb43b37c" }
 dependencies = [
     { name = "audiobox-aesthetics" },
     { name = "dacvae" },
@@ -2837,7 +2850,7 @@ requires-dist = [
     { name = "msclap", specifier = ">=1.3.4" },
     { name = "pandas", specifier = ">=2.3.3" },
     { name = "ruff", specifier = ">=0.14.9" },
-    { name = "sam-audio", git = "https://github.com/facebookresearch/sam-audio.git" },
+    { name = "sam-audio", git = "https://github.com/kento2247/sam-audio.git" },
     { name = "torch", specifier = ">=2.6.0", index = "https://download.pytorch.org/whl/cu118" },
     { name = "torchaudio", specifier = "==2.6.0", index = "https://download.pytorch.org/whl/cu118" },
     { name = "torchvision", specifier = ">=0.21.0", index = "https://download.pytorch.org/whl/cu118" },
