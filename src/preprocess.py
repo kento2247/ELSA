@@ -83,14 +83,20 @@ class QwenTextParser:
         """テキストからチャットテンプレートを構築する"""
         system_prompt = "You are a function that outputs ONLY valid JSON."
         user_prompt = f"""
-            Extract the sound sources likely present in the audio caption below.
+        Extract the sound sources likely present in the audio caption below.
 
-            Caption:
-            {text}
+        Caption:
+        {text}
 
-            Return ONLY this JSON schema:
-            {{["string"]}}
-            """
+        Rules:
+        - DO NOT normalize, summarize, or paraphrase.
+        - Preserve adverbs and intensity modifiers (e.g., softly, loudly, faintly).
+        - Keep the original wording as-is whenever possible.
+        - If a sound includes manner or intensity, include it verbatim.
+
+        Return ONLY this JSON schema:
+        {{["string"]}}
+        """
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
@@ -332,9 +338,9 @@ def main(args):
     dataset = TTAPreprocessDataset(data_dir=args.data_dir, split=args.split)
     dataloader = DataLoader(dataset, batch_size=args.bs, shuffle=True)
 
-    msclap_extract(dataloader, args.feats_dir)
-    laionclap_extract(dataloader, args.feats_dir)
-    # text_parse(dataloader, args.feats_dir)
+    # msclap_extract(dataloader, args.feats_dir)
+    # laionclap_extract(dataloader, args.feats_dir)
+    text_parse(dataloader, args.feats_dir)
 
 
 ### argument parser ###
