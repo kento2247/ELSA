@@ -156,16 +156,11 @@ class TTAEval:
 
         with torch.no_grad():
             for batch in tqdm(data_loader, desc=desc):
-                laionclap_audio = batch["laionclap_audio"].to(self.device)
-                laionclap_text = batch["laionclap_text"].to(self.device)
+                msclap_audio = batch["msclap_audio"].to(self.device)
+                msclap_text = batch["msclap_text"].to(self.device)
                 scores = batch["score"].numpy()
 
-                preds = (
-                    self.model(laionclap_audio, laionclap_text)
-                    .squeeze(-1)
-                    .cpu()
-                    .numpy()
-                )
+                preds = self.model(msclap_audio, msclap_text).squeeze(-1).cpu().numpy()
 
                 all_preds.append(preds)
                 all_scores.append(scores)
