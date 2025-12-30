@@ -172,7 +172,8 @@ class TTADataset(Dataset):
         max_score = 10.0
         if split != "test":
             return
-        if split != "REL":
+        if subjective_metric != "REL":
+            # XACLE dataset only supports REL subjective metric
             return
         xacle_data_path = os.path.join(
             self.data_dir, "XACLE_test_data", "meta_data", "test_with_score.csv"
