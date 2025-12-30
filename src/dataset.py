@@ -170,13 +170,16 @@ class TTADataset(Dataset):
     def _load_xacle_data(self, split: str, subjective_metric: str) -> None:
         """Load XACLE dataset as test sets."""
         max_score = 10.0
-        if split != "test":
-            return
         if subjective_metric != "REL":
             # XACLE dataset only supports REL subjective metric
             return
+
+        if split != "test":
+            dataset_dir = "XACLE_dataset"
+        else:
+            dataset_dir = "XACLE_test_data"
         xacle_data_path = os.path.join(
-            self.data_dir, "XACLE_test_data", "meta_data", "test_with_score.csv"
+            self.data_dir, dataset_dir, "meta_data", "test_with_score.csv"
         )
         xacle_data = pd.read_csv(xacle_data_path)
 
@@ -192,7 +195,7 @@ class TTADataset(Dataset):
                 float(row["average_score"]) / max_score
             )  # normalize to [0, 1]
             audio_file_path = os.path.join(
-                self.data_dir, "XACLE_test_data", "wav", f"{wavname}"
+                self.data_dir, dataset_dir, "wav", f"{wavname}"
             )
             ref_audio_file_path = ""
             if not os.path.exists(audio_file_path):

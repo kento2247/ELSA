@@ -12,6 +12,14 @@ aria2c -x10 -s10 -k1M https://zenodo.org/records/10737388/files/human_eval.zip?d
 unzip human_eval.zip
 rm human_eval.zip
 
+# Download XACLE dataset
+aria2c -x10 -s10 -k1M https://y-okamoto.sakura.ne.jp/XACLE_Challenge/2025/dataset/XACLE_dataset_train_val.zip
+aria2c -x10 -s10 -k1M https://y-okamoto.sakura.ne.jp/XACLE_Challenge/2025/dataset/XACLE_test_data_with_score.zip
+unzip XACLE_dataset_train_val.zip
+unzip XACLE_test_data_with_score.zip
+rm XACLE_dataset_train_val.zip
+rm XACLE_test_data_with_score.zip
+rm -rf __MACOSX
 cd ..
 
 
