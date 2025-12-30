@@ -64,6 +64,8 @@ class TTAEval:
             "git_branch": os.popen("git rev-parse --abbrev-ref HEAD").read().strip(),
             "git_commit": os.popen("git rev-parse HEAD").read().strip(),
             "run_command": "uv run " + " ".join(os.sys.argv),
+            "wandb_url": None,
+            "best_epoch": None,
         }
         if self.log_wandb:
             wandb.init(project="TTAEval")
@@ -122,6 +124,7 @@ class TTAEval:
                     best_test_metrics = test_metrics
 
         print(f"Training completed. Best epoch: {best_epoch}")
+        self.meta_data["best_epoch"] = best_epoch
         lb_text = format_leaderboard_text(self.meta_data, best_test_metrics)
         print(f"Best Leaderboard Text:\n{lb_text}")
         return best_test_metrics
@@ -281,7 +284,7 @@ def parse_args():
         "--test_dataset_names",
         type=str,
         nargs="+",
-        default=["relate", "audiocap", "musiccap"],
+        default=["relate", "audiocap", "musiccap", "xacle"],
         help="List of dataset names to test on",
     )
     # logging

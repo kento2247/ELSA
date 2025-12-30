@@ -13,10 +13,11 @@ class TTADataset(Dataset):
         self,
         data_dir: str,
         subjective_metrics: list[Literal["REL", "OVL"]] = ["REL", "OVL"],
-        dataset_names: list[Literal["relate", "audiocap", "musiccap"]] = [
+        dataset_names: list[Literal["relate", "audiocap", "musiccap", "xacle"]] = [
             "relate",
             "audiocap",
             "musiccap",
+            "xacle",
         ],
         split: Literal["train", "val", "test"] = "train",
         bitrate: int = 16000,
@@ -38,6 +39,8 @@ class TTADataset(Dataset):
                 self._load_audiocap_data(split, subjective_metric)
             if "musiccap" in dataset_names:
                 self._load_musiccap_data(split, subjective_metric)
+            if "xacle" in dataset_names:
+                self._load_xacle_data(split, subjective_metric)
 
         if pre_load_features:
             for i in tqdm(
@@ -48,6 +51,7 @@ class TTADataset(Dataset):
 
     def _load_relate_data(self, split: str, subjective_metric: str) -> None:
         """Load RELATE dataset and split into train, val, test sets."""
+        max_score = 10.0
         if subjective_metric != "REL":
             # RELATE dataset only supports REL subjective metric
             return
@@ -69,7 +73,7 @@ class TTADataset(Dataset):
             text_id: str = f"{split}_{subjective_metric}_{index}"
             wavname: str = row["wavname"]
             text: str = row["text"]
-            score: float = float(row["score"])
+            score: float = float(row["score"]) / max_score  # normalize to [0, 1]
             audio_file_path = os.path.join(self.data_dir, f"wav{wavname}")
             ref_audio_file_path = os.path.join(
                 self.data_dir,
@@ -95,6 +99,7 @@ class TTADataset(Dataset):
 
     def _load_audiocap_data(self, split: str, subjective_metric: str) -> None:
         """Load AudioCap dataset as test sets."""
+        max_score = 5.0
         if split != "test":
             return
         audiocap_data_path = os.path.join(
@@ -111,7 +116,9 @@ class TTADataset(Dataset):
             text: str = row["Text"]
             model: str = row["Model"]
             file_name: str = row["File Name"]
-            score: float = float(row[subjective_metric])
+            score: float = (
+                float(row[subjective_metric]) / max_score
+            )  # normalize to [0, 1]
             self.database.append(
                 {
                     "dataset": "audiocap",
@@ -127,6 +134,7 @@ class TTADataset(Dataset):
 
     def _load_musiccap_data(self, split: str, subjective_metric: str) -> None:
         """Load MusicCap music dataset as test sets."""
+        max_score = 5.0
         if split != "test":
             return
         musiccap_data_path = os.path.join(
@@ -143,7 +151,9 @@ class TTADataset(Dataset):
             text: str = row["Text"]
             model: str = row["Model"]
             file_name: str = row["File Name"]
-            score: float = float(row[subjective_metric])
+            score: float = (
+                float(row[subjective_metric]) / max_score
+            )  # normalize to [0, 1]
             self.database.append(
                 {
                     "dataset": "musiccap",
@@ -152,6 +162,47 @@ class TTADataset(Dataset):
                         self.data_dir, "human_eval", "music", model, f"{file_name}.wav"
                     ),
                     "ref_audio_file_path": "",
+                    "text": text,
+                    "score": score,
+                }
+            )
+
+    def _load_xacle_data(self, split: str, subjective_metric: str) -> None:
+        """Load XACLE dataset as test sets."""
+        max_score = 10.0
+        if split != "test":
+            return
+        if subjective_metric != "REL":
+            # XACLE dataset only supports REL subjective metric
+            return
+        xacle_data_path = os.path.join(
+            self.data_dir, "XACLE_test_data", "meta_data", "test_with_score.csv"
+        )
+        xacle_data = pd.read_csv(xacle_data_path)
+
+        for index, row in tqdm(
+            xacle_data.iterrows(),
+            total=len(xacle_data),
+            desc=f"Loading XACLE {split} {subjective_metric} data",
+        ):
+            text_id: str = f"{split}_{subjective_metric}_{index}"
+            wavname: str = row["wav_file_name"]
+            text: str = row["text"]
+            score: float = (
+                float(row["average_score"]) / max_score
+            )  # normalize to [0, 1]
+            audio_file_path = os.path.join(
+                self.data_dir, "XACLE_test_data", "wav", f"{wavname}"
+            )
+            ref_audio_file_path = ""
+            if not os.path.exists(audio_file_path):
+                raise FileNotFoundError(f"Wav file not found: {audio_file_path}")
+            self.database.append(
+                {
+                    "dataset": "xacle",
+                    "text_id": text_id,
+                    "audio_file_path": audio_file_path,
+                    "ref_audio_file_path": ref_audio_file_path,
                     "text": text,
                     "score": score,
                 }
