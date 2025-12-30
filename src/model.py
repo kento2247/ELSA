@@ -13,11 +13,11 @@ class TTAEvalModel(nn.Module):
 
         # Head MLP
         self.mlp = nn.Sequential(
-            nn.Linear(embedding_dim * 4, embedding_dim * 2),
+            nn.Linear(embedding_dim * 4, embedding_dim),
             nn.ReLU(),
-            nn.LayerNorm(embedding_dim * 2),
+            nn.LayerNorm(embedding_dim),
             nn.Dropout(dropout),
-            nn.Linear(embedding_dim * 2, embedding_dim),
+            nn.Linear(embedding_dim, 1),
         )
 
     def forward(
