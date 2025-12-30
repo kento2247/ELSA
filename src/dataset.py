@@ -178,8 +178,10 @@ class TTADataset(Dataset):
             dataset_dir = "XACLE_dataset"
         else:
             dataset_dir = "XACLE_test_data"
+
+        split_filename = "validation" if split == "val" else split
         xacle_data_path = os.path.join(
-            self.data_dir, dataset_dir, "meta_data", "test_with_score.csv"
+            self.data_dir, dataset_dir, "meta_data", f"{split_filename}_with_score.csv"
         )
         xacle_data = pd.read_csv(xacle_data_path)
 
