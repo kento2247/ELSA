@@ -174,14 +174,15 @@ class TTADataset(Dataset):
             # XACLE dataset only supports REL subjective metric
             return
 
+        split_name = split if split != "val" else "validation"
         if split != "test":
             dataset_dir = "XACLE_dataset"
+            filename = f"{split_name}_average.csv"
         else:
             dataset_dir = "XACLE_test_data"
-
-        split_filename = "validation" if split == "val" else split
+            filename = "test_with_score.csv"
         xacle_data_path = os.path.join(
-            self.data_dir, dataset_dir, "meta_data", f"{split_filename}_with_score.csv"
+            self.data_dir, dataset_dir, "meta_data", filename
         )
         xacle_data = pd.read_csv(xacle_data_path)
 
@@ -196,9 +197,14 @@ class TTADataset(Dataset):
             score: float = (
                 float(row["average_score"]) / max_score
             )  # normalize to [0, 1]
-            audio_file_path = os.path.join(
-                self.data_dir, dataset_dir, "wav", f"{wavname}"
-            )
+            if split == "test":
+                audio_file_path = os.path.join(
+                    self.data_dir, dataset_dir, "wav", f"{wavname}"
+                )
+            else:
+                audio_file_path = os.path.join(
+                    self.data_dir, dataset_dir, "wav", split_name, f"{wavname}"
+                )
             ref_audio_file_path = ""
             if not os.path.exists(audio_file_path):
                 raise FileNotFoundError(f"Wav file not found: {audio_file_path}")
