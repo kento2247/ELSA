@@ -14,6 +14,17 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from dataset import TTADataset
 
+### laion clap fix ###
+_torch_load = torch.load
+
+
+def torch_load_no_wo(*args, **kwargs):
+    kwargs["weights_only"] = False
+    return _torch_load(*args, **kwargs)
+
+
+torch.load = torch_load_no_wo
+
 
 class TTAPreprocessDataset(TTADataset):
     def __init__(self, data_dir: str, split: str = "train"):
@@ -246,6 +257,24 @@ class SamAudio:
 ### feature saving functions ###
 
 
+def check_all_file_exists(
+    datasets: list[str],
+    audio_files: list[str],
+    feats_dir: str,
+    feats_name: str,
+) -> bool:
+    """Check if all feature files in the batch exist"""
+    all_exist = True
+    for i in range(len(audio_files)):
+        dataset = datasets[i]
+        file_name = os.path.basename(audio_files[i]).replace(".wav", ".pt")
+        save_path = os.path.join(feats_dir, feats_name, dataset, file_name)
+        if not os.path.exists(save_path):
+            all_exist = False
+            break
+    return all_exist
+
+
 def save_feats(
     feats_dir: str,
     feats_name: str,
@@ -304,6 +333,19 @@ def msclap_extract(dataloader, feats_dir: str):
         ]
         text_file_names = [f"{text_id}.pt" for text_id in text_ids]
 
+        if check_all_file_exists(
+            datasets,
+            audio_files,
+            feats_dir,
+            "msclap_audio",
+        ) and check_all_file_exists(
+            datasets,
+            text_file_names,
+            feats_dir,
+            "msclap_text",
+        ):
+            continue
+
         msclap_audio_embeddings = msclap_embedder.embed_audios(audio_files)
         msclap_text_embeddings = msclap_embedder.embed_texts(texts)
 
@@ -335,6 +377,19 @@ def laionclap_extract(dataloader, feats_dir: str):
             os.path.basename(path).replace(".wav", ".pt") for path in audio_files
         ]
         text_file_names = [f"{text_id}.pt" for text_id in text_ids]
+
+        if check_all_file_exists(
+            datasets,
+            audio_files,
+            feats_dir,
+            "laionclap_audio",
+        ) and check_all_file_exists(
+            datasets,
+            text_file_names,
+            feats_dir,
+            "laionclap_text",
+        ):
+            continue
 
         laion_audio_embeddings = laion_clap_embedder.embed_audios(audio_files)
         laion_text_embeddings = laion_clap_embedder.embed_texts(texts)
@@ -381,6 +436,7 @@ def music_parse(dataloader, feats_dir: str):
         audio_files = batch["audio_file_path"]
         text_ids = batch["text_id"]
         datasets = batch["dataset"]
+
         for text_id, dataset, audio_file in zip(text_ids, datasets, audio_files):
             # Load parsed text prompts
             text_path = os.path.join(
@@ -497,6 +553,7 @@ def embed_parsed_data(
 def clear_gpu_memory():
     """Clear GPU memory cache"""
     import gc
+
     gc.collect()
     torch.cuda.empty_cache()
 
@@ -505,13 +562,13 @@ def main(args):
     dataset = TTAPreprocessDataset(data_dir=args.data_dir, split=args.split)
     dataloader = DataLoader(dataset, batch_size=args.bs, shuffle=True)
 
-    # msclap_extract(dataloader, args.feats_dir)
-    # clear_gpu_memory()
-    # laionclap_extract(dataloader, args.feats_dir)
+    msclap_extract(dataloader, args.feats_dir)
+    clear_gpu_memory()
+    laionclap_extract(dataloader, args.feats_dir)
     # clear_gpu_memory()
     # text_parse(dataloader, args.feats_dir)
     # clear_gpu_memory()
-    music_parse(dataloader, args.feats_dir)
+    # music_parse(dataloader, args.feats_dir)
 
 
 ### argument parser ###
