@@ -15,14 +15,14 @@ class TTAEvalModel(nn.Module):
         pam_prompt_2: torch.Tensor,
     ) -> torch.Tensor:
         """
-        Compute cosine similarity between audio and text features.
+        Compute similarity score using Transformer architecture.
 
         Args:
             audio_feats: Audio features from MSCLAP [B, D]
             text_feats: Text features from MSCLAP [B, D]
 
         Returns:
-            Similarity scores [B]
+            Similarity scores [B, 1]
         """
         audio_feats = F.normalize(audio_feats, p=2, dim=-1)
         pam_prompt_1 = F.normalize(pam_prompt_1, p=2, dim=-1)
