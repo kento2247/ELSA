@@ -583,9 +583,11 @@ def main(args):
     dataset = TTAPreprocessDataset(data_dir=args.data_dir, split=args.split)
     dataloader = DataLoader(dataset, batch_size=args.bs, shuffle=True)
 
-    msclap_extract(dataloader, args.feats_dir)
-    clear_gpu_memory()
-    laionclap_extract(dataloader, args.feats_dir)
+    pam_extract(args.feats_dir)
+
+    # msclap_extract(dataloader, args.feats_dir)
+    # clear_gpu_memory()
+    # laionclap_extract(dataloader, args.feats_dir)
     # clear_gpu_memory()
     # text_parse(dataloader, args.feats_dir)
     # clear_gpu_memory()
