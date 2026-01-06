@@ -212,12 +212,14 @@ class QwenTextParser:
 
 
 class SamAudio:
-    def __init__(self, model_name: str = "facebook/sam-audio-small"):
+    def __init__(
+        self, model_name: str = "facebook/sam-audio-small", dtype=torch.bfloat16
+    ):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model_name = model_name
         self.model = SAMAudio.from_pretrained(model_name)
         self.processor = SAMAudioProcessor.from_pretrained(model_name)
-        self.model = self.model.eval().to(self.device)
+        self.model = self.model.eval().to(self.device, dtype)
         self.sample_rate = self.processor.audio_sampling_rate
 
     def separate_audio(
@@ -562,13 +564,13 @@ def main(args):
     dataset = TTAPreprocessDataset(data_dir=args.data_dir, split=args.split)
     dataloader = DataLoader(dataset, batch_size=args.bs, shuffle=True)
 
-    msclap_extract(dataloader, args.feats_dir)
+    # msclap_extract(dataloader, args.feats_dir)
+    # clear_gpu_memory()
+    # laionclap_extract(dataloader, args.feats_dir)
+    # clear_gpu_memory()
+    text_parse(dataloader, args.feats_dir)
     clear_gpu_memory()
-    laionclap_extract(dataloader, args.feats_dir)
-    # clear_gpu_memory()
-    # text_parse(dataloader, args.feats_dir)
-    # clear_gpu_memory()
-    # music_parse(dataloader, args.feats_dir)
+    music_parse(dataloader, args.feats_dir)
 
 
 ### argument parser ###
