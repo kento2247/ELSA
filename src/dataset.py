@@ -75,6 +75,11 @@ class TTADataset(Dataset):
             text: str = row["text"]
             score: float = float(row["score"]) / max_score  # normalize to [0, 1]
             audio_file_path = os.path.join(self.data_dir, f"wav{wavname}")
+            audio_type = row["audio type"]
+
+            if audio_type == "natural":
+                continue
+
             ref_audio_file_path = os.path.join(
                 self.data_dir,
                 "wav",
@@ -119,6 +124,10 @@ class TTADataset(Dataset):
             score: float = (
                 float(row[subjective_metric]) / max_score
             )  # normalize to [0, 1]
+
+            if model == "real":
+                continue
+
             self.database.append(
                 {
                     "dataset": "audiocap",
@@ -126,7 +135,9 @@ class TTADataset(Dataset):
                     "audio_file_path": os.path.join(
                         self.data_dir, "human_eval", "audio", model, f"{file_name}.wav"
                     ),
-                    "ref_audio_file_path": "",
+                    "ref_audio_file_path": os.path.join(
+                        self.data_dir, "human_eval", "audio", "real", f"{file_name}.wav"
+                    ),
                     "text": text,
                     "score": score,
                 }
@@ -154,6 +165,10 @@ class TTADataset(Dataset):
             score: float = (
                 float(row[subjective_metric]) / max_score
             )  # normalize to [0, 1]
+
+            if model == "real":
+                continue
+
             self.database.append(
                 {
                     "dataset": "musiccap",
@@ -161,7 +176,9 @@ class TTADataset(Dataset):
                     "audio_file_path": os.path.join(
                         self.data_dir, "human_eval", "music", model, f"{file_name}.wav"
                     ),
-                    "ref_audio_file_path": "",
+                    "ref_audio_file_path": os.path.join(
+                        self.data_dir, "human_eval", "audio", "real", f"{file_name}.wav"
+                    ),
                     "text": text,
                     "score": score,
                 }
@@ -170,13 +187,19 @@ class TTADataset(Dataset):
     def _load_xacle_data(self, split: str, subjective_metric: str) -> None:
         """Load XACLE dataset as test sets."""
         max_score = 10.0
-        if split != "test":
-            return
         if subjective_metric != "REL":
             # XACLE dataset only supports REL subjective metric
             return
+
+        split_name = split if split != "val" else "validation"
+        if split != "test":
+            dataset_dir = "XACLE_dataset"
+            filename = f"{split_name}_average.csv"
+        else:
+            dataset_dir = "XACLE_test_data"
+            filename = "test_with_score.csv"
         xacle_data_path = os.path.join(
-            self.data_dir, "XACLE_test_data", "meta_data", "test_with_score.csv"
+            self.data_dir, dataset_dir, "meta_data", filename
         )
         xacle_data = pd.read_csv(xacle_data_path)
 
@@ -191,9 +214,14 @@ class TTADataset(Dataset):
             score: float = (
                 float(row["average_score"]) / max_score
             )  # normalize to [0, 1]
-            audio_file_path = os.path.join(
-                self.data_dir, "XACLE_test_data", "wav", f"{wavname}"
-            )
+            if split == "test":
+                audio_file_path = os.path.join(
+                    self.data_dir, dataset_dir, "wav", f"{wavname}"
+                )
+            else:
+                audio_file_path = os.path.join(
+                    self.data_dir, dataset_dir, "wav", split_name, f"{wavname}"
+                )
             ref_audio_file_path = ""
             if not os.path.exists(audio_file_path):
                 raise FileNotFoundError(f"Wav file not found: {audio_file_path}")
