@@ -1,46 +1,46 @@
 import torch
 import torch.nn as nn
 
+from si_sdr import si_sdr
+
 
 class TTAEvalModel(nn.Module):
     def __init__(
         self,
-        embedding_dim: int = 512,
-        dropout: float = 0.1,
+        min_db: float = -30.0,
+        max_db: float = 30.0,
     ):
-        super().__init__()
-        self.embedding_dim = embedding_dim
-
-        # Head MLP
-        self.mlp = nn.Sequential(
-            nn.Linear(embedding_dim * 4, embedding_dim),
-            nn.ReLU(),
-            nn.LayerNorm(embedding_dim),
-            nn.Dropout(dropout),
-            nn.Linear(embedding_dim, 1),
-        )
-
-    def forward(
-        self, audio_feats: torch.Tensor, text_feats: torch.Tensor
-    ) -> torch.Tensor:
         """
-        Compute similarity score using Transformer architecture.
+        SI-SDR baseline model.
 
         Args:
-            audio_feats: Audio features from MSCLAP [B, D]
-            text_feats: Text features from MSCLAP [B, D]
+            min_db: Minimum SI-SDR value (dB) for normalization
+            max_db: Maximum SI-SDR value (dB) for normalization
+        """
+        super().__init__()
+        self.min_db = min_db
+        self.max_db = max_db
+
+    def forward(
+        self,
+        audio: torch.Tensor,
+        ref_audio: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        Compute SI-SDR between generated audio and reference audio.
+
+        Args:
+            audio: Generated audio waveforms [B, T]
+            ref_audio: Reference audio waveforms [B, T]
 
         Returns:
-            Similarity scores [B, 1]
+            Normalized SI-SDR scores [B] in range [0, 1]
         """
-        B = audio_feats.size(0)
+        # Compute SI-SDR in dB
+        si_sdr_db = si_sdr(audio, ref_audio, zero_mean=True, return_db=True)
 
-        hadamard_product = audio_feats * text_feats  # [B, D]
-        diff = audio_feats - text_feats  # [B, D]
+        # Normalize to [0, 1] range
+        normalized = (si_sdr_db - self.min_db) / (self.max_db - self.min_db)
+        normalized = torch.clamp(normalized, 0.0, 1.0)
 
-        features = torch.cat(
-            [audio_feats, text_feats, hadamard_product, diff], dim=-1
-        )  # [B, 4D]
-        preds = self.mlp(features)  # [B, D]
-
-        return preds
+        return normalized

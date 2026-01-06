@@ -159,19 +159,32 @@ class TTAEval:
 
         with torch.no_grad():
             for batch in tqdm(data_loader, desc=desc):
-                laionclap_audio = batch["laionclap_audio"].to(self.device)
-                laionclap_text = batch["laionclap_text"].to(self.device)
+                audio = batch["audio"].to(self.device)
+                ref_audio = batch["ref_audio"].to(self.device)
+                has_ref_audio = batch["has_ref_audio"]
                 scores = batch["score"].numpy()
 
-                preds = (
-                    self.model(laionclap_audio, laionclap_text)
-                    .squeeze(-1)
-                    .cpu()
-                    .numpy()
-                )
+                # Only process samples with reference audio
+                mask = has_ref_audio.numpy()
+                if not mask.any():
+                    continue
+
+                audio = audio[mask]
+                ref_audio = ref_audio[mask]
+                scores = scores[mask]
+
+                preds = self.model(audio, ref_audio).cpu().numpy()
 
                 all_preds.append(preds)
                 all_scores.append(scores)
+
+        if len(all_preds) == 0:
+            return {
+                "mse": float("nan"),
+                "pearson": float("nan"),
+                "spearman": float("nan"),
+                "kendall_tau": float("nan"),
+            }
 
         all_preds = np.concatenate(all_preds)
         all_scores = np.concatenate(all_scores)
@@ -289,14 +302,14 @@ def parse_args():
         "--test_dataset_names",
         type=str,
         nargs="+",
-        default=["relate", "audiocap", "musiccap", "xacle"],
-        help="List of dataset names to test on",
+        default=["relate", "audiocap", "musiccap"],
+        help="List of dataset names to test on (SI-SDR requires reference audio)",
     )
     # logging
     parser.add_argument(
         "--log_wandb",
         action="store_true",
-        default=True,
+        default=False,
         help="Whether to log training with Weights & Biases",
     )
     parser.add_argument(
@@ -329,7 +342,8 @@ if __name__ == "__main__":
     )
 
     if args.mode == "train":
-        evaluator.train()
+        raise NotImplementedError("Training mode is disabled for SI-SDR baseline.")
     elif args.mode == "test":
-        evaluator.load_model("best_model.pt")
-        evaluator.test()
+        test_metrics = evaluator.test()
+        lb_text = format_leaderboard_text(evaluator.meta_data, test_metrics)
+        print(f"Leaderboard Text:\n{lb_text}")

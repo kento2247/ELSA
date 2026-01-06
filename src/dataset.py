@@ -119,6 +119,11 @@ class TTADataset(Dataset):
             score: float = (
                 float(row[subjective_metric]) / max_score
             )  # normalize to [0, 1]
+            ref_audio_file_path = os.path.join(
+                self.data_dir, "human_eval", "audio", "real", f"{file_name}.wav"
+            )
+            if not os.path.exists(ref_audio_file_path):
+                ref_audio_file_path = ""
             self.database.append(
                 {
                     "dataset": "audiocap",
@@ -126,7 +131,7 @@ class TTADataset(Dataset):
                     "audio_file_path": os.path.join(
                         self.data_dir, "human_eval", "audio", model, f"{file_name}.wav"
                     ),
-                    "ref_audio_file_path": "",
+                    "ref_audio_file_path": ref_audio_file_path,
                     "text": text,
                     "score": score,
                 }
@@ -154,6 +159,11 @@ class TTADataset(Dataset):
             score: float = (
                 float(row[subjective_metric]) / max_score
             )  # normalize to [0, 1]
+            ref_audio_file_path = os.path.join(
+                self.data_dir, "human_eval", "music", "real", f"{file_name}.wav"
+            )
+            if not os.path.exists(ref_audio_file_path):
+                ref_audio_file_path = ""
             self.database.append(
                 {
                     "dataset": "musiccap",
@@ -161,7 +171,7 @@ class TTADataset(Dataset):
                     "audio_file_path": os.path.join(
                         self.data_dir, "human_eval", "music", model, f"{file_name}.wav"
                     ),
-                    "ref_audio_file_path": "",
+                    "ref_audio_file_path": ref_audio_file_path,
                     "text": text,
                     "score": score,
                 }
@@ -251,34 +261,18 @@ class TTADataset(Dataset):
         return feats.to(self.dtype)
 
     def _load_features(self, data):
-        """Pre-load all features into memory to speed up data loading."""
-        text_file_name = f"{data['text_id']}.pt"
-        audio_file_name = os.path.basename(data["audio_file_path"]).replace(
-            ".wav", ".pt"
-        )
-        dataset_name = data["dataset"]
+        """Load raw audio waveforms for SI-SDR computation."""
+        data["audio"] = self._load_wav(data["audio_file_path"])
 
-        # data["audio"] = self._load_wav(data["audio_file_path"])
-        data["msclap_audio"] = self._load_pre_extracted_feats(
-            feats_name="msclap_audio",
-            dataset_name=dataset_name,
-            file_name=audio_file_name,
-        )
-        data["msclap_text"] = self._load_pre_extracted_feats(
-            feats_name="msclap_text",
-            dataset_name=dataset_name,
-            file_name=text_file_name,
-        )
-        data["laionclap_audio"] = self._load_pre_extracted_feats(
-            feats_name="laionclap_audio",
-            dataset_name=dataset_name,
-            file_name=audio_file_name,
-        )
-        data["laionclap_text"] = self._load_pre_extracted_feats(
-            feats_name="laionclap_text",
-            dataset_name=dataset_name,
-            file_name=text_file_name,
-        )
+        # Load reference audio if available
+        if data["ref_audio_file_path"] and os.path.exists(data["ref_audio_file_path"]):
+            data["ref_audio"] = self._load_wav(data["ref_audio_file_path"])
+            data["has_ref_audio"] = True
+        else:
+            # Placeholder tensor for batching (will be skipped in evaluation)
+            data["ref_audio"] = torch.zeros_like(data["audio"])
+            data["has_ref_audio"] = False
+
         return data
 
     def __getitem__(self, idx):
