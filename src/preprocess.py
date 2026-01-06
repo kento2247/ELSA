@@ -419,6 +419,18 @@ def text_parse(dataloader, feats_dir: str):
         text_ids = batch["text_id"]
         datasets = batch["dataset"]
 
+        # Check if all files in batch already exist
+        all_exist = True
+        for text_id, dataset in zip(text_ids, datasets):
+            save_path = os.path.join(
+                feats_dir, "parsed_texts", dataset, f"{text_id}.json"
+            )
+            if not os.path.exists(save_path):
+                all_exist = False
+                break
+        if all_exist:
+            continue
+
         # Implement text parsing logic here using qwen_text_parser
         audio_sources: list[str] = qwen_text_parser.parse_texts(texts)
 
