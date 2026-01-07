@@ -156,58 +156,6 @@ uv run ruff check --fix # 自動修正
 | Spearman | スピアマンの順位相関係数 |
 | Kendall's τ | ケンドールの順位相関係数 |
 
-## Qualitative Results
-
-### REL（Audio-キャプション間の類似度評価）
-
-#### RELATE Dataset
-| Model | MSE ↓ | Pearson ↑ | Spearman ↑ | Kendall τ ↑ |
-|-------|------:|----------:|-----------:|------------:|
-| [Microsoft CLAP](https://github.com/microsoft/CLAP) | 49.4577 | 0.0834 | 0.0905 | 0.0648 |
-| [LAION CLAP](https://github.com/LAION-AI/CLAP) | 50.3844 | 0.0771 | 0.0838 | 0.0611 |
-| [PAM](https://github.com/soham97/PAM) | 53.9596 | -0.0238 | -0.0207 | -0.0149 |
-| Ours | XXX | XXX | XXX | XXX |
-
-#### AudioCap Dataset
-| Model | MSE ↓ | Pearson ↑ | Spearman ↑ | Kendall τ ↑ |
-|-------|------:|----------:|-----------:|------------:|
-| [Microsoft CLAP](https://github.com/microsoft/CLAP) | 9.0860 | 0.0897 | 0.0932 | 0.0647 |
-| [LAION CLAP](https://github.com/LAION-AI/CLAP) | 9.9390 | 0.1439 | 0.1517 | 0.1040 |
-| [PAM](https://github.com/soham97/PAM) | 9.9202 | -0.0305 | -0.0788 | -0.0517 |
-| Ours | XXX | XXX | XXX | XXX |
-
-#### MusicCap Dataset
-| Model | MSE ↓ | Pearson ↑ | Spearman ↑ | Kendall τ ↑ |
-|-------|------:|----------:|-----------:|------------:|
-| [Microsoft CLAP](https://github.com/microsoft/CLAP) | 8.6426 | 0.1518 | 0.1442 | 0.0991 |
-| [LAION CLAP](https://github.com/LAION-AI/CLAP) | 9.6082 | 0.1584 | 0.1745 | 0.1190 |
-| [PAM](https://github.com/soham97/PAM) | 8.8781 | 0.0537 | 0.0496 | 0.0340 |
-| Ours | XXX | XXX | XXX | XXX |
-
-#### XACLE Dataset
-| Model | MSE ↓ | Pearson ↑ | Spearman ↑ | Kendall τ ↑ |
-|-------|------:|----------:|-----------:|------------:|
-| [Microsoft CLAP](https://github.com/microsoft/CLAP) | XXX | XXX | XXX | XXX |
-| [LAION CLAP](https://github.com/LAION-AI/CLAP) | XXX | XXX | XXX | XXX |
-| [PAM](https://github.com/soham97/PAM) | XXX | XXX | XXX | XXX |
-| Ours | XXX | XXX | XXX | XXX |
-
-### OVL（Audio音質評価）
-#### AudioCap Dataset
-| Model | MSE ↓ | Pearson ↑ | Spearman ↑ | Kendall τ ↑ |
-|-------|------:|----------:|-----------:|------------:|
-| [Microsoft CLAP](https://github.com/microsoft/CLAP) | 7.2382 | 0.0399 | 0.0523 | 0.0357 |
-| [LAION CLAP](https://github.com/LAION-AI/CLAP) | 8.0051 | 0.0857 | 0.0888 | 0.0615 |
-| [PAM](https://github.com/soham97/PAM) | 7.9779 | -0.0553 | -0.0949 | -0.0667 |
-| Ours | XXX | XXX | XXX | XXX |
-
-#### MusicCap Dataset
-| Model | MSE ↓ | Pearson ↑ | Spearman ↑ | Kendall τ ↑ |
-|-------|------:|----------:|-----------:|------------:|
-| [Microsoft CLAP](https://github.com/microsoft/CLAP) | 5.6764 | 0.0662 | 0.0610 | 0.0405 |
-| [LAION CLAP](https://github.com/LAION-AI/CLAP) | 6.4569 | 0.0827 | 0.0804 | 0.0541 |
-| [PAM](https://github.com/soham97/PAM) | 5.8532 | 0.0235 | 0.0290 | 0.0198 |
-| Ours | XXX | XXX | XXX | XXX |
 
 ## プロジェクト構成
 
