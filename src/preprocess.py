@@ -212,12 +212,15 @@ class QwenTextParser:
 
 
 class SamAudio:
-    def __init__(self, model_name: str = "facebook/sam-audio-small"):
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    def __init__(
+        self, model_name: str = "facebook/sam-audio-small", dtype=torch.bfloat16
+    ):
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.dtype = dtype
         self.model_name = model_name
         self.model = SAMAudio.from_pretrained(model_name)
         self.processor = SAMAudioProcessor.from_pretrained(model_name)
-        self.model = self.model.eval().to(self.device)
+        self.model = self.model.eval().to(self.device, self.dtype)
         self.sample_rate = self.processor.audio_sampling_rate
 
     def separate_audio(
@@ -239,20 +242,35 @@ class SamAudio:
         """
         separated_audios = {}
         for description in descriptions:
-            batch = self.processor(
-                audios=[audio_file],
-                descriptions=[description],
-            ).to(self.device)
-
-            with torch.inference_mode():
+            with torch.no_grad():
+                batch = self.processor(
+                    audios=[audio_file],
+                    descriptions=[description],
+                ).to(self.device)
+                # Only convert audio tensors to dtype, keep index tensors as int64
+                batch.audios = batch.audios.to(self.dtype)
                 result = self.model.separate(
                     batch,
                     predict_spans=predict_spans,
                     reranking_candidates=reranking_candidates,
                 )
-            separated_audios[description] = result.target.cpu()
+
+            separated_audios[description] = result.target[0]
         return separated_audios
 
+    def save_audio(
+        self,
+        save_path: str,
+        audio_tensor: torch.Tensor,
+        dtype: torch.dtype = torch.float32,
+    ):
+        """Save audio tensor to file"""
+        sample_rate = self.processor.audio_sampling_rate
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        # Ensure tensor is 2D (num_channels, num_samples)
+        if audio_tensor.dim() == 1:
+            audio_tensor = audio_tensor.unsqueeze(0)
+        torchaudio.save(save_path, audio_tensor.cpu().to(dtype), sample_rate)
 
 ### feature saving functions ###
 
@@ -417,6 +435,18 @@ def text_parse(dataloader, feats_dir: str):
         text_ids = batch["text_id"]
         datasets = batch["dataset"]
 
+        # Check if all files in batch already exist
+        all_exist = True
+        for text_id, dataset in zip(text_ids, datasets):
+            save_path = os.path.join(
+                feats_dir, "parsed_texts", dataset, f"{text_id}.json"
+            )
+            if not os.path.exists(save_path):
+                all_exist = False
+                break
+        if all_exist:
+            continue
+
         # Implement text parsing logic here using qwen_text_parser
         audio_sources: list[str] = qwen_text_parser.parse_texts(texts)
 
@@ -455,7 +485,7 @@ def music_parse(dataloader, feats_dir: str):
                 save_dir = os.path.join(feats_dir, "separated_audio", dataset, text_id)
                 os.makedirs(save_dir, exist_ok=True)
                 save_path = os.path.join(save_dir, f"{i}.wav")
-                torchaudio.save(save_path, audio_tensor, sam_audio.sample_rate)
+                sam_audio.save_audio(save_path, audio_tensor)
 
 
 def embed_parsed_data(
