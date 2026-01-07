@@ -6,13 +6,13 @@ import re
 import laion_clap
 import torch
 import torchaudio
+from dataset import TTADataset
 from msclap import CLAP
 from sam_audio import SAMAudio, SAMAudioProcessor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
-
-from dataset import TTADataset
+from utils.helper_func import fix_seed
 
 ### laion clap fix ###
 _torch_load = torch.load
@@ -271,6 +271,7 @@ class SamAudio:
         if audio_tensor.dim() == 1:
             audio_tensor = audio_tensor.unsqueeze(0)
         torchaudio.save(save_path, audio_tensor.cpu().to(dtype), sample_rate)
+
 
 ### feature saving functions ###
 
@@ -624,12 +625,19 @@ def arg_parser():
         default=1,
         help="Batch size for DataLoader",
     )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Seed for random number generator",
+    )
     args = parser.parse_args()
     return args
 
 
 if __name__ == "__main__":
     args = arg_parser()
+    fix_seed(args.seed)
     splits = ["train", "val", "test"]
     for split in splits:
         args.split = split

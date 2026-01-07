@@ -5,18 +5,18 @@ import time
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader
-from tqdm import tqdm
-
 import wandb
 from dataset import TTADataset
 from model import TTAEvalModel
+from torch.utils.data import DataLoader
+from tqdm import tqdm
 from utils.eval_methods import (
     kendall_tau,
     mse,
     pearson_correlation,
     spearman_correlation,
 )
+from utils.helper_func import fix_seed
 from utils.lb_output import format_leaderboard_text
 
 
@@ -304,12 +304,18 @@ def parse_args():
         action="store_true",
         help="Whether to save qualitative results as json during testing",
     )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Seed for random number generator",
+    )
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
-
+    fix_seed(args.seed)
     evaluator = TTAEval(
         # paths
         data_dir=args.data_dir,
