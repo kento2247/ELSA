@@ -33,8 +33,6 @@ class TTAEvalModel(nn.Module):
         Returns:
             Similarity scores [B, 1]
         """
-        B = audio_feats.size(0)
-
         hadamard_product = audio_feats * text_feats  # [B, D]
         diff = audio_feats - text_feats  # [B, D]
 

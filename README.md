@@ -79,28 +79,28 @@ data/
 テストを実行する前に、CLAP特徴量を事前に抽出しておく必要があります。
 
 ```bash
-uv run python src/preprocess.py
+uv run src/preprocess.py
 ```
 
 ### 学習
 
 ```bash
-uv run python src/main.py train --data_dir data --epochs 30 --batch_size 32 --lr 1e-5
+uv run src/main.py train --data_dir data --epochs 30 --batch_size 32 --lr 1e-5
 ```
 
 ### テスト
 
 ```bash
 # 全データセット・全指標でテスト
-uv run python src/main.py test --data_dir data
+uv run src/main.py test --data_dir data
 
 # 特定のデータセット・指標を指定
-uv run python src/main.py test --data_dir data \
+uv run src/main.py test --data_dir data \
     --subjective_metrics REL OVL \
     --test_dataset_names relate audiocap musiccap xacle
 
 # 結果をJSONで保存
-uv run python src/main.py test --data_dir data --save_qualitative
+uv run src/main.py test --data_dir data --save_qualitative
 ```
 
 ### lint チェック
