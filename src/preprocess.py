@@ -6,12 +6,13 @@ import re
 import laion_clap
 import torch
 import torchaudio
-from dataset import TTADataset
 from msclap import CLAP
 from sam_audio import SAMAudio, SAMAudioProcessor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
+from dataset import TTADataset
 from utils.helper_func import fix_seed
 
 ### laion clap fix ###
@@ -598,14 +599,14 @@ def pam_extract(feats_dir: str):
         feats_dir,
         "pam_prompts",
         "all",
-        "prompt_1.wav",
+        "prompt_1.pt",
         feats[0],
     )
     save_feats(
         feats_dir,
         "pam_prompts",
         "all",
-        "prompt_2.wav",
+        "prompt_2.pt",
         feats[1],
     )
 
