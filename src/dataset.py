@@ -13,11 +13,14 @@ class TTADataset(Dataset):
         self,
         data_dir: str,
         subjective_metrics: list[Literal["REL", "OVL"]] = ["REL", "OVL"],
-        dataset_names: list[Literal["relate", "audiocap", "musiccap", "xacle"]] = [
+        dataset_names: list[
+            Literal["relate", "audiocap", "musiccap", "xacle", "aishell7b"]
+        ] = [
             "relate",
             "audiocap",
             "musiccap",
             "xacle",
+            "aishell7b",
         ],
         split: Literal["train", "val", "test"] = "train",
         bitrate: int = 16000,
@@ -41,6 +44,8 @@ class TTADataset(Dataset):
                 self._load_musiccap_data(split, subjective_metric)
             if "xacle" in dataset_names:
                 self._load_xacle_data(split, subjective_metric)
+            if "aishell7b" in dataset_names:
+                self._load_aishell7b_data(split, subjective_metric)
 
         if pre_load_features:
             for i in tqdm(
@@ -228,6 +233,63 @@ class TTADataset(Dataset):
             self.database.append(
                 {
                     "dataset": "xacle",
+                    "text_id": text_id,
+                    "audio_file_path": audio_file_path,
+                    "ref_audio_file_path": ref_audio_file_path,
+                    "text": text,
+                    "score": score,
+                }
+            )
+
+    def _load_aishell7b_data(self, split: str, subjective_metric: str) -> None:
+        """Load AISHELL-7B (MusicEval-full) dataset."""
+        max_score = 5.0
+
+        # Load prompt info (text prompts)
+        prompt_info_path = os.path.join(
+            self.data_dir, "MusicEval-full", "prompt_info.txt"
+        )
+        prompt_df = pd.read_csv(prompt_info_path, sep="\t")
+        prompt_dict = dict(zip(prompt_df["id"], prompt_df["text"]))
+
+        # Map split name: val -> dev
+        split_name = "dev" if split == "val" else split
+        mos_list_path = os.path.join(
+            self.data_dir, "MusicEval-full", "sets", f"{split_name}_mos_list.txt"
+        )
+        mos_data = pd.read_csv(mos_list_path, header=None, names=["filename", "ovl", "rel"])
+
+        for index, row in tqdm(
+            mos_data.iterrows(),
+            total=len(mos_data),
+            desc=f"Loading AISHELL-7B {split} {subjective_metric} data",
+        ):
+            text_id: str = f"{split}_{subjective_metric}_{index}"
+            filename: str = row["filename"]
+
+            # Extract prompt ID from filename (e.g., audiomos2025-track1-S032_P092.wav -> P092)
+            prompt_id = filename.split("_")[-1].replace(".wav", "")
+            text: str = prompt_dict.get(prompt_id, "")
+
+            # Select score based on subjective metric
+            if subjective_metric == "OVL":
+                score = float(row["ovl"]) / max_score
+            elif subjective_metric == "REL":
+                score = float(row["rel"]) / max_score
+            else:
+                continue
+
+            audio_file_path = os.path.join(
+                self.data_dir, "MusicEval-full", "wav", filename
+            )
+            ref_audio_file_path = ""
+
+            if not os.path.exists(audio_file_path):
+                raise FileNotFoundError(f"Wav file not found: {audio_file_path}")
+
+            self.database.append(
+                {
+                    "dataset": "aishell7b",
                     "text_id": text_id,
                     "audio_file_path": audio_file_path,
                     "ref_audio_file_path": ref_audio_file_path,
