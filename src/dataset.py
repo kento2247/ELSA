@@ -75,6 +75,11 @@ class TTADataset(Dataset):
             text: str = row["text"]
             score: float = float(row["score"]) / max_score  # normalize to [0, 1]
             audio_file_path = os.path.join(self.data_dir, f"wav{wavname}")
+            audio_type = row["audio type"]
+
+            if audio_type == "natural":
+                continue
+
             ref_audio_file_path = os.path.join(
                 self.data_dir,
                 "wav",
@@ -119,11 +124,10 @@ class TTADataset(Dataset):
             score: float = (
                 float(row[subjective_metric]) / max_score
             )  # normalize to [0, 1]
-            ref_audio_file_path = os.path.join(
-                self.data_dir, "human_eval", "audio", "real", f"{file_name}.wav"
-            )
-            if not os.path.exists(ref_audio_file_path):
-                ref_audio_file_path = ""
+
+            if model == "real":
+                continue
+
             self.database.append(
                 {
                     "dataset": "audiocap",
@@ -131,7 +135,9 @@ class TTADataset(Dataset):
                     "audio_file_path": os.path.join(
                         self.data_dir, "human_eval", "audio", model, f"{file_name}.wav"
                     ),
-                    "ref_audio_file_path": ref_audio_file_path,
+                    "ref_audio_file_path": os.path.join(
+                        self.data_dir, "human_eval", "audio", "real", f"{file_name}.wav"
+                    ),
                     "text": text,
                     "score": score,
                 }
@@ -159,11 +165,10 @@ class TTADataset(Dataset):
             score: float = (
                 float(row[subjective_metric]) / max_score
             )  # normalize to [0, 1]
-            ref_audio_file_path = os.path.join(
-                self.data_dir, "human_eval", "music", "real", f"{file_name}.wav"
-            )
-            if not os.path.exists(ref_audio_file_path):
-                ref_audio_file_path = ""
+
+            if model == "real":
+                continue
+
             self.database.append(
                 {
                     "dataset": "musiccap",
@@ -171,7 +176,9 @@ class TTADataset(Dataset):
                     "audio_file_path": os.path.join(
                         self.data_dir, "human_eval", "music", model, f"{file_name}.wav"
                     ),
-                    "ref_audio_file_path": ref_audio_file_path,
+                    "ref_audio_file_path": os.path.join(
+                        self.data_dir, "human_eval", "audio", "real", f"{file_name}.wav"
+                    ),
                     "text": text,
                     "score": score,
                 }
