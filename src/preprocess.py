@@ -60,6 +60,7 @@ class LaionClapEmbedder:
     def __init__(self, dtype: torch.dtype = torch.float32):
         self.model = laion_clap.CLAP_Module(enable_fusion=False)
         self.model.load_ckpt("models/630k-audioset-best.pt")
+        self.model.eval()
         self.max_text_len = 77  # LaionCLAP max text length
         self.dtype = dtype
 
@@ -592,7 +593,7 @@ def clear_gpu_memory():
 
 def main(args):
     dataset = TTAPreprocessDataset(data_dir=args.data_dir, split=args.split)
-    dataloader = DataLoader(dataset, batch_size=args.bs, shuffle=True)
+    dataloader = DataLoader(dataset, batch_size=args.bs, shuffle=False)
 
     msclap_extract(dataloader, args.feats_dir)
     clear_gpu_memory()
