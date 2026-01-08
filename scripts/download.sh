@@ -20,9 +20,13 @@ unzip XACLE_test_data_with_score.zip
 rm XACLE_dataset_train_val.zip
 rm XACLE_test_data_with_score.zip
 rm -rf __MACOSX
+
+# Download AISHELL-7A dataset
+gdown 1KjrZAzmd3k3BWZ0XofwvOG-0jvsiRjCQ
+unzip MusicEval-full.zip
+rm MusicEval-full.zip
+
 cd ..
-
-
 mkdir -p models
 cd models
 
