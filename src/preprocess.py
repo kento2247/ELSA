@@ -6,12 +6,13 @@ import re
 import laion_clap
 import torch
 import torchaudio
-from dataset import TTADataset
 from msclap import CLAP
 from sam_audio import SAMAudio, SAMAudioProcessor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
+from dataset import TTADataset
 from utils.helper_func import fix_seed
 
 ### laion clap fix ###
@@ -593,13 +594,13 @@ def main(args):
     dataset = TTAPreprocessDataset(data_dir=args.data_dir, split=args.split)
     dataloader = DataLoader(dataset, batch_size=args.bs, shuffle=True)
 
-    # msclap_extract(dataloader, args.feats_dir)
-    # clear_gpu_memory()
-    # laionclap_extract(dataloader, args.feats_dir)
-    # clear_gpu_memory()
-    text_parse(dataloader, args.feats_dir)
+    msclap_extract(dataloader, args.feats_dir)
     clear_gpu_memory()
-    music_parse(dataloader, args.feats_dir)
+    laionclap_extract(dataloader, args.feats_dir)
+    # clear_gpu_memory()
+    # text_parse(dataloader, args.feats_dir)
+    # clear_gpu_memory()
+    # music_parse(dataloader, args.feats_dir)
 
 
 ### argument parser ###
