@@ -22,6 +22,7 @@ dependencies = [
     "pyloudnorm>=0.2.0",
     "hear21passt>=0.0.26",
     "frechet-audio-distance>=0.3.3",
+    "gdown>=5.2.0",
 ]
 
 [tool.uv.sources]
