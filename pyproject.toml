@@ -15,9 +15,13 @@ dependencies = [
     "tqdm>=4.67.1",
     "wandb>=0.23.0",
     "laion-clap>=1.1.6",
-    "sam-audio",
     "torchcodec==0.5",
     "xformers",
+    "numpy>=1.26.4",
+    "openl3",
+    "pyloudnorm>=0.2.0",
+    "hear21passt>=0.0.26",
+    "frechet-audio-distance>=0.3.3",
 ]
 
 [tool.uv.sources]
@@ -25,7 +29,7 @@ torch = [{ index = "pytorch-cu118" }]
 torchaudio = [{ index = "pytorch-cu118" }]
 torchvision = [{ index = "pytorch-cu118" }]
 xformers = [{ index = "pytorch-cu118" }]
-sam-audio = { git = "https://github.com/kento2247/sam-audio.git", rev = "91f99d7d5e90b73dcbbe4ba4f617995c918a3f7e" }
+openl3 = { git = "https://github.com/marl/openl3.git" }
 
 [[tool.uv.index]]
 name     = "pytorch-cu118"

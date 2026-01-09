@@ -5,11 +5,12 @@ import time
 
 import numpy as np
 import torch
+from torch.utils.data import DataLoader
+from tqdm import tqdm
+
 import wandb
 from dataset import TTADataset
 from model import TTAEvalModel
-from torch.utils.data import DataLoader
-from tqdm import tqdm
 from utils.eval_methods import (
     kendall_tau,
     mse,
@@ -159,22 +160,22 @@ class TTAEval:
 
         with torch.no_grad():
             for batch in tqdm(data_loader, desc=desc):
-                laionclap_audio = batch["laionclap_audio"].to(self.device)
-                laionclap_text = batch["laionclap_text"].to(self.device)
+                openl3_audio = batch["openl3_audio"].to(self.device)
+                openl3_ref_audio = batch["openl3_ref_audio"].to(self.device)
                 scores = batch["score"].numpy()
 
                 preds = (
-                    self.model(laionclap_audio, laionclap_text)
-                    .squeeze(-1)
-                    .cpu()
-                    .numpy()
+                    self.model(openl3_audio, openl3_ref_audio).squeeze(-1).cpu().numpy()
                 )
 
                 all_preds.append(preds)
                 all_scores.append(scores)
 
-        all_preds = np.concatenate(all_preds)
+        all_preds = np.concatenate([np.expand_dims(pred, axis=0) for pred in all_preds])
         all_scores = np.concatenate(all_scores)
+
+        all_preds *= -1  # lower better to higher better
+        all_preds = (all_preds - all_preds.min()) / (all_preds.max() - all_preds.min())
 
         return {
             "mse": mse(all_scores, all_preds),
@@ -200,7 +201,7 @@ class TTAEval:
 
                 test_loader = DataLoader(
                     test_dataset,
-                    batch_size=self.batch_size,
+                    batch_size=1,
                     shuffle=False,
                     num_workers=4,
                 )
@@ -233,11 +234,6 @@ class TTAEval:
         os.makedirs(self.model_dir, exist_ok=True)
         path = os.path.join(self.model_dir, filename)
         torch.save(self.model.state_dict(), path)
-
-    def load_model(self, filename: str = "model.pt"):
-        path = os.path.join(self.model_dir, filename)
-        self.model.load_state_dict(torch.load(path, map_location=self.device))
-        self.model.to(self.device)
 
 
 def parse_args():
@@ -289,7 +285,7 @@ def parse_args():
         "--test_dataset_names",
         type=str,
         nargs="+",
-        default=["relate", "audiocap", "musiccap", "xacle"],
+        default=["relate", "audiocap", "musiccap"],
         help="List of dataset names to test on",
     )
     # logging
@@ -335,7 +331,6 @@ if __name__ == "__main__":
     )
 
     if args.mode == "train":
-        evaluator.train()
+        raise NotImplementedError("Training mode is currently disabled.")
     elif args.mode == "test":
-        evaluator.load_model("best_model.pt")
         evaluator.test()

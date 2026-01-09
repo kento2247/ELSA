@@ -1,44 +1,44 @@
 import torch
 import torch.nn as nn
 
+from fd_openl3.openl3_fd import calculate_embd_statistics, calculate_frechet_distance
+
 
 class TTAEvalModel(nn.Module):
     def __init__(
         self,
-        embedding_dim: int = 512,
-        dropout: float = 0.1,
     ):
-        super().__init__()
-        self.embedding_dim = embedding_dim
-
-        # Head MLP
-        self.mlp = nn.Sequential(
-            nn.Linear(embedding_dim * 4, embedding_dim),
-            nn.ReLU(),
-            nn.LayerNorm(embedding_dim),
-            nn.Dropout(dropout),
-            nn.Linear(embedding_dim, 1),
-        )
-
-    def forward(
-        self, audio_feats: torch.Tensor, text_feats: torch.Tensor
-    ) -> torch.Tensor:
         """
-        Compute similarity score using Transformer architecture.
+        Frechet Distance (openl3, inversed) baseline model.
 
         Args:
-            audio_feats: Audio features from MSCLAP [B, D]
-            text_feats: Text features from MSCLAP [B, D]
+        """
+        super().__init__()
+
+    def forward(
+        self,
+        audio: torch.Tensor,
+        ref_audio: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        Compute Fréchet Distance (openl3, inversed) between generated audio and reference audio.
+
+        Args:
+            audio: Generated audio waveforms [B, T, D]
+            ref_audio: Reference audio waveforms [B, T, D]
 
         Returns:
-            Similarity scores [B, 1]
+            Normalized Fréchet Distance scores [B] in range [0, 1]
         """
-        hadamard_product = audio_feats * text_feats  # [B, D]
-        diff = audio_feats - text_feats  # [B, D]
+        # Compute Fréchet Distance
+        audio, ref_audio = audio.cpu().numpy(), ref_audio.cpu().numpy()
+        fds = torch.randn(audio.shape[0])
+        for i, (audio_sample, ref_sample) in enumerate(zip(audio, ref_audio)):
+            audio_sample = audio_sample.squeeze(0)
+            ref_sample = ref_sample.squeeze(0)
+            audio_mu, audio_sigma = calculate_embd_statistics(audio_sample)
+            ref_mu, ref_sigma = calculate_embd_statistics(ref_sample)
+            fd = calculate_frechet_distance(audio_mu, audio_sigma, ref_mu, ref_sigma)
+            fds[i] = fd
 
-        features = torch.cat(
-            [audio_feats, text_feats, hadamard_product, diff], dim=-1
-        )  # [B, 4D]
-        preds = self.mlp(features)  # [B, D]
-
-        return preds
+        return fds

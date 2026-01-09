@@ -17,11 +17,11 @@ class TTADataset(Dataset):
             "relate",
             "audiocap",
             "musiccap",
-            "xacle",
+            # "xacle",
         ],
         split: Literal["train", "val", "test"] = "train",
         bitrate: int = 16000,
-        max_len: int = 160000 * 10,
+        max_len: int = 16000 * 10,
         dtype: torch.dtype = torch.float32,
         pre_load_features: bool = False,
     ):
@@ -177,7 +177,7 @@ class TTADataset(Dataset):
                         self.data_dir, "human_eval", "music", model, f"{file_name}.wav"
                     ),
                     "ref_audio_file_path": os.path.join(
-                        self.data_dir, "human_eval", "audio", "real", f"{file_name}.wav"
+                        self.data_dir, "human_eval", "music", "real", f"{file_name}.wav"
                     ),
                     "text": text,
                     "score": score,
@@ -269,33 +269,55 @@ class TTADataset(Dataset):
 
     def _load_features(self, data):
         """Pre-load all features into memory to speed up data loading."""
-        text_file_name = f"{data['text_id']}.pt"
+        # text_file_name = f"{data['text_id']}.pt"
         audio_file_name = os.path.basename(data["audio_file_path"]).replace(
+            ".wav", ".pt"
+        )
+        ref_audio_file_name = os.path.basename(data["ref_audio_file_path"]).replace(
             ".wav", ".pt"
         )
         dataset_name = data["dataset"]
 
-        # data["audio"] = self._load_wav(data["audio_file_path"])
-        data["msclap_audio"] = self._load_pre_extracted_feats(
-            feats_name="msclap_audio",
+        data["audio"] = self._load_wav(data["audio_file_path"])
+        # data["msclap_audio"] = self._load_pre_extracted_feats(
+        #     feats_name="msclap_audio",
+        #     dataset_name=dataset_name,
+        #     file_name=audio_file_name,
+        # )
+        # data["msclap_text"] = self._load_pre_extracted_feats(
+        #     feats_name="msclap_text",
+        #     dataset_name=dataset_name,
+        #     file_name=text_file_name,
+        # )
+        # data["laionclap_audio"] = self._load_pre_extracted_feats(
+        #     feats_name="laionclap_audio",
+        #     dataset_name=dataset_name,
+        #     file_name=audio_file_name,
+        # )
+        # data["laionclap_audio_ref"] = self._load_pre_extracted_feats(
+        #     feats_name="laionclap_audio_ref",
+        #     dataset_name=dataset_name,
+        #     file_name=ref_audio_file_name,
+        # )
+        # data["laionclap_text"] = self._load_pre_extracted_feats(
+        #     feats_name="laionclap_text",
+        #     dataset_name=dataset_name,
+        #     file_name=text_file_name,
+        # )
+
+        audio_feat = self._load_pre_extracted_feats(
+            feats_name="openl3_audio",
             dataset_name=dataset_name,
             file_name=audio_file_name,
-        )
-        data["msclap_text"] = self._load_pre_extracted_feats(
-            feats_name="msclap_text",
+        ).unsqueeze(0)
+        ref_audio_feat = self._load_pre_extracted_feats(
+            feats_name="openl3_audio_ref",
             dataset_name=dataset_name,
-            file_name=text_file_name,
-        )
-        data["laionclap_audio"] = self._load_pre_extracted_feats(
-            feats_name="laionclap_audio",
-            dataset_name=dataset_name,
-            file_name=audio_file_name,
-        )
-        data["laionclap_text"] = self._load_pre_extracted_feats(
-            feats_name="laionclap_text",
-            dataset_name=dataset_name,
-            file_name=text_file_name,
-        )
+            file_name=ref_audio_file_name,
+        ).unsqueeze(0)
+
+        data["openl3_audio"] = audio_feat
+        data["openl3_ref_audio"] = ref_audio_feat
         return data
 
     def __getitem__(self, idx):

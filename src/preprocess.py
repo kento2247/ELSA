@@ -5,13 +5,15 @@ import re
 
 import laion_clap
 import torch
-import torchaudio
-from dataset import TTADataset
 from msclap import CLAP
-from sam_audio import SAMAudio, SAMAudioProcessor
+
+# from sam_audio import SAMAudio, SAMAudioProcessor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
+from dataset import TTADataset
+from fd_openl3.openl3_fd import extract_embeddings as openl3_extract_embeddings
 from utils.helper_func import fix_seed
 
 ### laion clap fix ###
@@ -77,6 +79,32 @@ class LaionClapEmbedder:
             audio_embeddings = self.model.get_audio_embedding_from_filelist(
                 x=audio_files, use_tensor=True
             )
+        return audio_embeddings.to(self.dtype)
+
+
+class Openl3Embedder:
+    def __init__(self, dtype: torch.dtype = torch.float32):
+        self.dtype = dtype
+
+    def embed_audios(
+        self,
+        audio_files: list[str],
+        samplingrate: int = 16000,
+        content_type: str = "music",
+    ) -> torch.Tensor:
+        """Embed audios in batch"""
+        batch_size = len(audio_files)
+        audio_embeddings = openl3_extract_embeddings(
+            directory_path=audio_files[0],
+            channels=1,
+            samplingrate=samplingrate,
+            content_type=content_type,
+            openl3_hop_size=0.5,
+            batch_size=batch_size,
+        )
+        audio_embeddings = torch.tensor(audio_embeddings)
+        if batch_size == 1:
+            audio_embeddings = audio_embeddings.unsqueeze(0)
         return audio_embeddings.to(self.dtype)
 
 
@@ -211,66 +239,66 @@ class QwenTextParser:
         return responses
 
 
-class SamAudio:
-    def __init__(
-        self, model_name: str = "facebook/sam-audio-small", dtype=torch.bfloat16
-    ):
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.dtype = dtype
-        self.model_name = model_name
-        self.model = SAMAudio.from_pretrained(model_name)
-        self.processor = SAMAudioProcessor.from_pretrained(model_name)
-        self.model = self.model.eval().to(self.device, self.dtype)
-        self.sample_rate = self.processor.audio_sampling_rate
+# class SamAudio:
+#     def __init__(
+#         self, model_name: str = "facebook/sam-audio-small", dtype=torch.bfloat16
+#     ):
+#         self.device = "cuda" if torch.cuda.is_available() else "cpu"
+#         self.dtype = dtype
+#         self.model_name = model_name
+#         self.model = SAMAudio.from_pretrained(model_name)
+#         self.processor = SAMAudioProcessor.from_pretrained(model_name)
+#         self.model = self.model.eval().to(self.device, self.dtype)
+#         self.sample_rate = self.processor.audio_sampling_rate
 
-    def separate_audio(
-        self,
-        audio_file: str,
-        descriptions: list[str],
-        predict_spans: bool = False,
-        reranking_candidates: int = 1,
-    ) -> dict[str, torch.Tensor]:
-        """
-        Separate audio based on text descriptions.
-        Args:
-            audio_file: Path to audio file.
-            descriptions: List of text descriptions for separation.
-            predict_spans: Whether to predict spans (better quality but slower).
-            reranking_candidates: Number of reranking candidates.
-        Returns:
-            Dict mapping description to separated audio tensor.
-        """
-        separated_audios = {}
-        for description in descriptions:
-            with torch.no_grad():
-                batch = self.processor(
-                    audios=[audio_file],
-                    descriptions=[description],
-                ).to(self.device)
-                # Only convert audio tensors to dtype, keep index tensors as int64
-                batch.audios = batch.audios.to(self.dtype)
-                result = self.model.separate(
-                    batch,
-                    predict_spans=predict_spans,
-                    reranking_candidates=reranking_candidates,
-                )
+#     def separate_audio(
+#         self,
+#         audio_file: str,
+#         descriptions: list[str],
+#         predict_spans: bool = False,
+#         reranking_candidates: int = 1,
+#     ) -> dict[str, torch.Tensor]:
+#         """
+#         Separate audio based on text descriptions.
+#         Args:
+#             audio_file: Path to audio file.
+#             descriptions: List of text descriptions for separation.
+#             predict_spans: Whether to predict spans (better quality but slower).
+#             reranking_candidates: Number of reranking candidates.
+#         Returns:
+#             Dict mapping description to separated audio tensor.
+#         """
+#         separated_audios = {}
+#         for description in descriptions:
+#             with torch.no_grad():
+#                 batch = self.processor(
+#                     audios=[audio_file],
+#                     descriptions=[description],
+#                 ).to(self.device)
+#                 # Only convert audio tensors to dtype, keep index tensors as int64
+#                 batch.audios = batch.audios.to(self.dtype)
+#                 result = self.model.separate(
+#                     batch,
+#                     predict_spans=predict_spans,
+#                     reranking_candidates=reranking_candidates,
+#                 )
 
-            separated_audios[description] = result.target[0]
-        return separated_audios
+#             separated_audios[description] = result.target[0]
+#         return separated_audios
 
-    def save_audio(
-        self,
-        save_path: str,
-        audio_tensor: torch.Tensor,
-        dtype: torch.dtype = torch.float32,
-    ):
-        """Save audio tensor to file"""
-        sample_rate = self.processor.audio_sampling_rate
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        # Ensure tensor is 2D (num_channels, num_samples)
-        if audio_tensor.dim() == 1:
-            audio_tensor = audio_tensor.unsqueeze(0)
-        torchaudio.save(save_path, audio_tensor.cpu().to(dtype), sample_rate)
+#     def save_audio(
+#         self,
+#         save_path: str,
+#         audio_tensor: torch.Tensor,
+#         dtype: torch.dtype = torch.float32,
+#     ):
+#         """Save audio tensor to file"""
+#         sample_rate = self.processor.audio_sampling_rate
+#         os.makedirs(os.path.dirname(save_path), exist_ok=True)
+#         # Ensure tensor is 2D (num_channels, num_samples)
+#         if audio_tensor.dim() == 1:
+#             audio_tensor = audio_tensor.unsqueeze(0)
+#         torchaudio.save(save_path, audio_tensor.cpu().to(dtype), sample_rate)
 
 
 ### feature saving functions ###
@@ -429,6 +457,54 @@ def laionclap_extract(dataloader, feats_dir: str):
         )
 
 
+def openl3_extract(dataloader, feats_dir: str):
+    openl3_embedder = Openl3Embedder()
+    for batch in tqdm(dataloader, desc="Extracting Openl3 features"):
+        datasets = batch["dataset"]
+        content_type = (
+            "env" if datasets[0] in ["relate", "audiocap", "xacle"] else "music"
+        )
+        sr = dataloader.dataset.bitrate
+
+        audio_files = batch["audio_file_path"]
+        audio_file_names = [
+            os.path.basename(path).replace(".wav", ".pt") for path in audio_files
+        ]
+        if not check_all_file_exists(datasets, audio_files, feats_dir, "openl3_audio"):
+            openl3_audio_embeddings = openl3_embedder.embed_audios(
+                audio_files,
+                samplingrate=sr,
+                content_type=content_type,
+            )
+            save_batch_feats(
+                feats_dir,
+                datasets,
+                "openl3_audio",
+                audio_file_names,
+                openl3_audio_embeddings,
+            )
+
+        ref_audio_files = batch["ref_audio_file_path"]
+        ref_audio_file_names = [
+            os.path.basename(path).replace(".wav", ".pt") for path in ref_audio_files
+        ]
+        if not check_all_file_exists(
+            datasets, ref_audio_files, feats_dir, "openl3_audio_ref"
+        ):
+            ref_audio_embeddings = openl3_embedder.embed_audios(
+                ref_audio_files,
+                samplingrate=sr,
+                content_type=content_type,
+            )
+            save_batch_feats(
+                feats_dir,
+                datasets,
+                "openl3_audio_ref",
+                ref_audio_file_names,
+                ref_audio_embeddings,
+            )
+
+
 def text_parse(dataloader, feats_dir: str):
     qwen_text_parser = QwenTextParser()
     for batch in tqdm(dataloader, desc="Parsing Text with Qwen"):
@@ -460,33 +536,33 @@ def text_parse(dataloader, feats_dir: str):
                 json.dump(sources, f, ensure_ascii=False, indent=0)
 
 
-def music_parse(dataloader, feats_dir: str):
-    """Parse music audio using SAM-Audio based on splited text"""
-    sam_audio = SamAudio()
-    for batch in tqdm(dataloader, desc="Parsing Music with SAM-Audio"):
-        audio_files = batch["audio_file_path"]
-        text_ids = batch["text_id"]
-        datasets = batch["dataset"]
+# def music_parse(dataloader, feats_dir: str):
+#     """Parse music audio using SAM-Audio based on splited text"""
+#     sam_audio = SamAudio()
+#     for batch in tqdm(dataloader, desc="Parsing Music with SAM-Audio"):
+#         audio_files = batch["audio_file_path"]
+#         text_ids = batch["text_id"]
+#         datasets = batch["dataset"]
 
-        for text_id, dataset, audio_file in zip(text_ids, datasets, audio_files):
-            # Load parsed text prompts
-            text_path = os.path.join(
-                feats_dir, "parsed_texts", dataset, f"{text_id}.json"
-            )
-            with open(text_path, "r") as f:
-                text_prompts = json.load(f)
+#         for text_id, dataset, audio_file in zip(text_ids, datasets, audio_files):
+#             # Load parsed text prompts
+#             text_path = os.path.join(
+#                 feats_dir, "parsed_texts", dataset, f"{text_id}.json"
+#             )
+#             with open(text_path, "r") as f:
+#                 text_prompts = json.load(f)
 
-            # Split audio using SAM-Audio
-            separated_audios: dict[str, torch.Tensor] = sam_audio.separate_audio(
-                audio_file, text_prompts
-            )
+#             # Split audio using SAM-Audio
+#             separated_audios: dict[str, torch.Tensor] = sam_audio.separate_audio(
+#                 audio_file, text_prompts
+#             )
 
-            # Save separated audio files
-            for i, (description, audio_tensor) in enumerate(separated_audios.items()):
-                save_dir = os.path.join(feats_dir, "separated_audio", dataset, text_id)
-                os.makedirs(save_dir, exist_ok=True)
-                save_path = os.path.join(save_dir, f"{i}.wav")
-                sam_audio.save_audio(save_path, audio_tensor)
+#             # Save separated audio files
+#             for i, (description, audio_tensor) in enumerate(separated_audios.items()):
+#                 save_dir = os.path.join(feats_dir, "separated_audio", dataset, text_id)
+#                 os.makedirs(save_dir, exist_ok=True)
+#                 save_path = os.path.join(save_dir, f"{i}.wav")
+#                 sam_audio.save_audio(save_path, audio_tensor)
 
 
 def embed_parsed_data(
@@ -593,13 +669,15 @@ def main(args):
     dataset = TTAPreprocessDataset(data_dir=args.data_dir, split=args.split)
     dataloader = DataLoader(dataset, batch_size=args.bs, shuffle=True)
 
+    openl3_extract(dataloader, args.feats_dir)
+
     # msclap_extract(dataloader, args.feats_dir)
     # clear_gpu_memory()
     # laionclap_extract(dataloader, args.feats_dir)
     # clear_gpu_memory()
-    text_parse(dataloader, args.feats_dir)
-    clear_gpu_memory()
-    music_parse(dataloader, args.feats_dir)
+    # text_parse(dataloader, args.feats_dir)
+    # clear_gpu_memory()
+    # music_parse(dataloader, args.feats_dir)
 
 
 ### argument parser ###
@@ -638,7 +716,7 @@ def arg_parser():
 if __name__ == "__main__":
     args = arg_parser()
     fix_seed(args.seed)
-    splits = ["train", "val", "test"]
+    splits = ["test"]
     for split in splits:
         args.split = split
         main(args)
