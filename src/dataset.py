@@ -24,7 +24,7 @@ class TTADataset(Dataset):
         ],
         split: Literal["train", "val", "test"] = "train",
         bitrate: int = 16000,
-        max_len: int = 160000 * 10,
+        max_len: int = 16000 * 10,
         dtype: torch.dtype = torch.float32,
         pre_load_features: bool = False,
     ):
@@ -182,7 +182,7 @@ class TTADataset(Dataset):
                         self.data_dir, "human_eval", "music", model, f"{file_name}.wav"
                     ),
                     "ref_audio_file_path": os.path.join(
-                        self.data_dir, "human_eval", "audio", "real", f"{file_name}.wav"
+                        self.data_dir, "human_eval", "music", "real", f"{file_name}.wav"
                     ),
                     "text": text,
                     "score": score,
