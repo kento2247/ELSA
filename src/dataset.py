@@ -104,6 +104,7 @@ class TTADataset(Dataset):
                     "ref_audio_file_path": ref_audio_file_path,
                     "text": text,
                     "score": score,
+                    "subjective_metric_id": 0 if subjective_metric == "REL" else 1,
                 }
             )
 
@@ -145,6 +146,7 @@ class TTADataset(Dataset):
                     ),
                     "text": text,
                     "score": score,
+                    "subjective_metric_id": 0 if subjective_metric == "REL" else 1,
                 }
             )
 
@@ -186,6 +188,7 @@ class TTADataset(Dataset):
                     ),
                     "text": text,
                     "score": score,
+                    "subjective_metric_id": 0 if subjective_metric == "REL" else 1,
                 }
             )
 
@@ -238,6 +241,7 @@ class TTADataset(Dataset):
                     "ref_audio_file_path": ref_audio_file_path,
                     "text": text,
                     "score": score,
+                    "subjective_metric_id": 0 if subjective_metric == "REL" else 1,
                 }
             )
 
@@ -295,6 +299,7 @@ class TTADataset(Dataset):
                     "ref_audio_file_path": ref_audio_file_path,
                     "text": text,
                     "score": score,
+                    "subjective_metric_id": 0 if subjective_metric == "REL" else 1,
                 }
             )
 
