@@ -37,10 +37,11 @@ class TTAPreprocessDataset(TTADataset):
 
 
 class MSClapEmbedder:
-    def __init__(self, dtype: torch.dtype = torch.float32):
+    def __init__(self, dtype: torch.dtype = torch.float32, seed: int = 42):
         self.model = CLAP(version="2023", use_cuda=True)
         self.max_text_len = 77  # MSCLAP max text length
         self.dtype = dtype
+        self.seed = seed
 
     def embed_texts(self, texts: list[str]) -> torch.Tensor:
         """Embed texts in batch"""
@@ -51,6 +52,7 @@ class MSClapEmbedder:
 
     def embed_audios(self, audio_files: list[str]) -> torch.Tensor:
         """Embed audios in batch"""
+        fix_seed(self.seed)  # Ensure seed is fixed before audio embedding
         with torch.no_grad():
             audio_embeddings = self.model.get_audio_embeddings(audio_files)
         return audio_embeddings.to(self.dtype)
@@ -60,6 +62,7 @@ class LaionClapEmbedder:
     def __init__(self, dtype: torch.dtype = torch.float32):
         self.model = laion_clap.CLAP_Module(enable_fusion=False)
         self.model.load_ckpt("models/630k-audioset-best.pt")
+        self.model.eval()
         self.max_text_len = 77  # LaionCLAP max text length
         self.dtype = dtype
 
@@ -339,8 +342,8 @@ def save_batch_feats(
 ### feature extraction main ###
 
 
-def msclap_extract(dataloader, feats_dir: str):
-    msclap_embedder = MSClapEmbedder()
+def msclap_extract(dataloader, feats_dir: str, seed: int = 42):
+    msclap_embedder = MSClapEmbedder(seed=seed)
 
     for batch in tqdm(dataloader, desc="Extracting MSCLAP features"):
         audio_files = batch["audio_file_path"]
@@ -516,6 +519,8 @@ def embed_parsed_data(
         datasets = batch["dataset"]
 
         for text_id, dataset in zip(text_ids, datasets):
+            if dataset == "aishell7b":
+                continue
             # Load parsed text prompts
             text_path = os.path.join(
                 feats_dir, "parsed_texts", dataset, f"{text_id}.json"
@@ -537,8 +542,14 @@ def embed_parsed_data(
             audio_embeddings = embedder.embed_audios(audio_files)  # [N, D]
             text_embeddings = embedder.embed_texts(text_prompts)  # [N, D]
 
-            num_segments = len(audio_files)
+            audio_len = audio_embeddings.shape[0]
+            text_len = text_embeddings.shape[0]
+            num_segments = min(audio_len, text_len)
             embed_dim = audio_embeddings.shape[-1]
+
+            if audio_len != text_len:
+                audio_embeddings = audio_embeddings[:num_segments]
+                text_embeddings = text_embeddings[:num_segments]
 
             # Create mask for valid positions
             mask = torch.zeros(seq_size, dtype=torch.bool)
@@ -548,12 +559,20 @@ def embed_parsed_data(
             # Pad or truncate to seq_size
             if num_segments < seq_size:
                 pad_size = seq_size - num_segments
-                audio_embeddings = torch.cat(
-                    [audio_embeddings, torch.zeros(pad_size, embed_dim)], dim=0
+                audio_pad = torch.zeros(
+                    pad_size,
+                    embed_dim,
+                    device=audio_embeddings.device,
+                    dtype=audio_embeddings.dtype,
                 )
-                text_embeddings = torch.cat(
-                    [text_embeddings, torch.zeros(pad_size, embed_dim)], dim=0
+                text_pad = torch.zeros(
+                    pad_size,
+                    embed_dim,
+                    device=text_embeddings.device,
+                    dtype=text_embeddings.dtype,
                 )
+                audio_embeddings = torch.cat([audio_embeddings, audio_pad], dim=0)
+                text_embeddings = torch.cat([text_embeddings, text_pad], dim=0)
             else:
                 audio_embeddings = audio_embeddings[:seq_size]
                 text_embeddings = text_embeddings[:seq_size]
@@ -592,15 +611,15 @@ def clear_gpu_memory():
 
 def main(args):
     dataset = TTAPreprocessDataset(data_dir=args.data_dir, split=args.split)
-    dataloader = DataLoader(dataset, batch_size=args.bs, shuffle=True)
+    dataloader = DataLoader(dataset, batch_size=args.bs, shuffle=False)
 
-    msclap_extract(dataloader, args.feats_dir)
-    clear_gpu_memory()
     laionclap_extract(dataloader, args.feats_dir)
-    # clear_gpu_memory()
-    # text_parse(dataloader, args.feats_dir)
-    # clear_gpu_memory()
-    # music_parse(dataloader, args.feats_dir)
+    clear_gpu_memory()
+    msclap_extract(dataloader, args.feats_dir, seed=args.seed)
+    clear_gpu_memory()
+    embed_parsed_data(dataloader, args.feats_dir, embed_model="msclap")
+    clear_gpu_memory()
+    embed_parsed_data(dataloader, args.feats_dir, embed_model="laionclap")
 
 
 ### argument parser ###

@@ -27,6 +27,7 @@ class TTADataset(Dataset):
         max_len: int = 160000 * 10,
         dtype: torch.dtype = torch.float32,
         pre_load_features: bool = False,
+        parsed_seq_size: int = 20,
     ):
         """Initialize TTADataset with specified data directory and split."""
         self.data_dir = data_dir
@@ -34,6 +35,7 @@ class TTADataset(Dataset):
         self.max_len = max_len
         self.dtype = dtype
         self.pre_load_features = pre_load_features
+        self.parsed_seq_size = parsed_seq_size
         self.database = []
         for subjective_metric in subjective_metrics:
             if "relate" in dataset_names:
@@ -329,6 +331,16 @@ class TTADataset(Dataset):
         feats = torch.load(feat_path, map_location="cpu")
         return feats.to(self.dtype)
 
+    def _load_pre_extracted_mask(
+        self, feats_name: str, dataset_name: str, file_name: str
+    ) -> torch.Tensor:
+        """Load pre-extracted mask without dtype casting."""
+        feats_dir = os.path.join(self.data_dir, "features", feats_name)
+        feat_path = os.path.join(feats_dir, dataset_name, file_name)
+        if not os.path.exists(feat_path):
+            raise FileNotFoundError(f"Feature file not found: {feat_path}")
+        return torch.load(feat_path, map_location="cpu")
+
     def _load_features(self, data):
         """Pre-load all features into memory to speed up data loading."""
         text_file_name = f"{data['text_id']}.pt"
@@ -358,7 +370,78 @@ class TTADataset(Dataset):
             dataset_name=dataset_name,
             file_name=text_file_name,
         )
+        if dataset_name == "aishell7b":
+            data["msclap_parsed_audio"] = []
+            data["msclap_parsed_text"] = []
+            data["laionclap_parsed_audio"] = []
+            data["laionclap_parsed_text"] = []
+            data["parsed_mask"] = []
+            return data
+        data["msclap_parsed_audio"] = self._load_pre_extracted_feats(
+            feats_name="msclap_parsed_audio",
+            dataset_name=dataset_name,
+            file_name=text_file_name,
+        )
+        data["msclap_parsed_text"] = self._load_pre_extracted_feats(
+            feats_name="msclap_parsed_text",
+            dataset_name=dataset_name,
+            file_name=text_file_name,
+        )
+        data["laionclap_parsed_audio"] = self._load_pre_extracted_feats(
+            feats_name="laionclap_parsed_audio",
+            dataset_name=dataset_name,
+            file_name=text_file_name,
+        )
+        data["laionclap_parsed_text"] = self._load_pre_extracted_feats(
+            feats_name="laionclap_parsed_text",
+            dataset_name=dataset_name,
+            file_name=text_file_name,
+        )
+        data["parsed_mask"] = self._load_pre_extracted_mask(
+            feats_name="parsed_mask",
+            dataset_name=dataset_name,
+            file_name=text_file_name,
+        )
+        data["msclap_parsed_audio"] = self._pad_or_truncate_feats(
+            data["msclap_parsed_audio"]
+        )
+        data["msclap_parsed_text"] = self._pad_or_truncate_feats(
+            data["msclap_parsed_text"]
+        )
+        data["laionclap_parsed_audio"] = self._pad_or_truncate_feats(
+            data["laionclap_parsed_audio"]
+        )
+        data["laionclap_parsed_text"] = self._pad_or_truncate_feats(
+            data["laionclap_parsed_text"]
+        )
+        data["parsed_mask"] = self._pad_or_truncate_mask(data["parsed_mask"])
         return data
+
+    def _pad_or_truncate_feats(self, feats: torch.Tensor) -> torch.Tensor:
+        """Pad or truncate parsed features to a fixed sequence length."""
+        target_len = self.parsed_seq_size
+        cur_len = feats.shape[0]
+        if cur_len == target_len:
+            return feats
+        if cur_len > target_len:
+            return feats[:target_len]
+        pad_size = target_len - cur_len
+        pad = torch.zeros(
+            pad_size, feats.shape[1], dtype=feats.dtype, device=feats.device
+        )
+        return torch.cat([feats, pad], dim=0)
+
+    def _pad_or_truncate_mask(self, mask: torch.Tensor) -> torch.Tensor:
+        """Pad or truncate parsed mask to a fixed sequence length."""
+        target_len = self.parsed_seq_size
+        cur_len = mask.shape[0]
+        if cur_len == target_len:
+            return mask
+        if cur_len > target_len:
+            return mask[:target_len]
+        pad_size = target_len - cur_len
+        pad = torch.zeros(pad_size, dtype=mask.dtype, device=mask.device)
+        return torch.cat([mask, pad], dim=0)
 
     def __getitem__(self, idx):
         """Get item by index from the dataset."""
