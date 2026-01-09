@@ -18,7 +18,7 @@ class TTAEvalModel(nn.Module):
 
         # MLP head
         self.mlp = nn.Sequential(
-            nn.Linear(embedding_dim * 4, embedding_dim),
+            nn.Linear(embedding_dim * 5, embedding_dim),
             nn.ReLU(),
             nn.LayerNorm(embedding_dim),
             nn.Dropout(dropout),
@@ -45,10 +45,6 @@ class TTAEvalModel(nn.Module):
         # Get metric embedding
         metric_emb = self.metric_embedding(metric_ids)  # [B, D]
 
-        # Condition audio/text features with metric embedding
-        audio_feats = audio_feats + metric_emb  # [B, D]
-        text_feats = text_feats + metric_emb  # [B, D]
-
         hadamard_product = audio_feats * text_feats  # [B, D]
         diff = audio_feats - text_feats  # [B, D]
 
@@ -56,6 +52,6 @@ class TTAEvalModel(nn.Module):
             [audio_feats, text_feats, hadamard_product, diff], dim=-1
         )  # [B, 4D]
 
-        preds = self.mlp(features)  # [B, 1]
+        preds = self.mlp(features, metric_emb)  # [B, 1]
 
         return preds
