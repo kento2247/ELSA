@@ -49,9 +49,9 @@ class TTAEvalModel(nn.Module):
         diff = audio_feats - text_feats  # [B, D]
 
         features = torch.cat(
-            [audio_feats, text_feats, hadamard_product, diff], dim=-1
+            [audio_feats, text_feats, hadamard_product, diff, metric_emb], dim=-1
         )  # [B, 4D]
 
-        preds = self.mlp(features, metric_emb)  # [B, 1]
+        preds = self.mlp(features)  # [B, 1]
 
         return preds
