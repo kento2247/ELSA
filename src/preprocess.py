@@ -1,4 +1,5 @@
 import argparse
+import contextlib
 import json
 import os
 import re
@@ -6,6 +7,7 @@ import re
 import laion_clap
 import torch
 import torchaudio
+from hear21passt.base import get_basic_model as passt_get_basic_model
 from msclap import CLAP
 from sam_audio import SAMAudio, SAMAudioProcessor
 from torch.utils.data import DataLoader
@@ -13,6 +15,7 @@ from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from dataset import TTADataset
+from kl_div_passt.passt_kld import return_probabilities
 from utils.helper_func import fix_seed
 
 ### laion clap fix ###
@@ -82,6 +85,24 @@ class LaionClapEmbedder:
                 x=audio_files, use_tensor=True
             )
         return audio_embeddings.to(self.dtype)
+
+
+class PaSSTEmbedder:
+    def __init__(self, dtype: torch.dtype = torch.float32):
+        with open(os.devnull, "w") as f, contextlib.redirect_stdout(f):
+            model = passt_get_basic_model(mode="logits")
+            model.eval()
+            model = model.cuda()
+        self.model = model
+        self.dtype = dtype
+
+    def embed_audios(self, audio_files: list[str]) -> torch.Tensor:
+        """Embed audios in batch"""
+        audio_embeddings = []
+        with torch.no_grad():
+            for audio_file in audio_files:
+                audio_embeddings.append(return_probabilities(self.model, audio_file))
+        return torch.stack(audio_embeddings).to(self.dtype)
 
 
 class QwenTextParser:
@@ -433,6 +454,41 @@ def laionclap_extract(dataloader, feats_dir: str):
         )
 
 
+def passt_extract(dataloader, feats_dir: str):
+    passt_embedder = PaSSTEmbedder()
+    for batch in tqdm(dataloader, desc="Extracting PaSST features"):
+        datasets = batch["dataset"]
+        audio_files = batch["audio_file_path"]
+        audio_file_names = [
+            os.path.basename(path).replace(".wav", ".pt") for path in audio_files
+        ]
+        if not check_all_file_exists(datasets, audio_files, feats_dir, "passt_audio"):
+            passt_audio_embeddings = passt_embedder.embed_audios(audio_files)
+            save_batch_feats(
+                feats_dir=feats_dir,
+                datasets=datasets,
+                feats_name="passt_audio",
+                file_names=audio_file_names,
+                feats=passt_audio_embeddings,
+            )
+
+        ref_audio_files = batch["ref_audio_file_path"]
+        ref_audio_file_names = [
+            os.path.basename(path).replace(".wav", ".pt") for path in ref_audio_files
+        ]
+        if not check_all_file_exists(
+            datasets, ref_audio_files, feats_dir, "passt_audio_ref"
+        ):
+            ref_audio_embeddings = passt_embedder.embed_audios(ref_audio_files)
+            save_batch_feats(
+                feats_dir,
+                datasets,
+                "passt_audio_ref",
+                ref_audio_file_names,
+                ref_audio_embeddings,
+            )
+
+
 def text_parse(dataloader, feats_dir: str):
     qwen_text_parser = QwenTextParser()
     for batch in tqdm(dataloader, desc="Parsing Text with Qwen"):
@@ -597,9 +653,11 @@ def main(args):
     dataset = TTAPreprocessDataset(data_dir=args.data_dir, split=args.split)
     dataloader = DataLoader(dataset, batch_size=args.bs, shuffle=False)
 
-    laionclap_extract(dataloader, args.feats_dir)
-    clear_gpu_memory()
-    msclap_extract(dataloader, args.feats_dir, seed=args.seed)
+    passt_extract(dataloader, args.feats_dir)
+
+    # laionclap_extract(dataloader, args.feats_dir)
+    # clear_gpu_memory()
+    # msclap_extract(dataloader, args.feats_dir, seed=args.seed)
     # clear_gpu_memory()
     # text_parse(dataloader, args.feats_dir)
     # clear_gpu_memory()
@@ -642,7 +700,7 @@ def arg_parser():
 if __name__ == "__main__":
     args = arg_parser()
     fix_seed(args.seed)
-    splits = ["train", "val", "test"]
+    splits = ["test"]
     for split in splits:
         args.split = split
         main(args)

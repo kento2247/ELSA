@@ -5,11 +5,12 @@ import time
 
 import numpy as np
 import torch
+from torch.utils.data import DataLoader
+from tqdm import tqdm
+
 import wandb
 from dataset import TTADataset
 from model import TTAEvalModel
-from torch.utils.data import DataLoader
-from tqdm import tqdm
 from utils.eval_methods import (
     kendall_tau,
     mse,
@@ -159,15 +160,12 @@ class TTAEval:
 
         with torch.no_grad():
             for batch in tqdm(data_loader, desc=desc):
-                laionclap_audio = batch["laionclap_audio"].to(self.device)
-                laionclap_text = batch["laionclap_text"].to(self.device)
+                passt_audio = batch["passt_audio"].to(self.device)
+                passt_audio_ref = batch["passt_audio_ref"].to(self.device)
                 scores = batch["score"].numpy()
 
                 preds = (
-                    self.model(laionclap_audio, laionclap_text)
-                    .squeeze(-1)
-                    .cpu()
-                    .numpy()
+                    self.model(passt_audio, passt_audio_ref).squeeze(-1).cpu().numpy()
                 )
 
                 all_preds.append(preds)
@@ -175,6 +173,9 @@ class TTAEval:
 
         all_preds = np.concatenate(all_preds)
         all_scores = np.concatenate(all_scores)
+
+        all_preds *= -1  # lower better to higher better
+        all_preds = (all_preds - all_preds.min()) / (all_preds.max() - all_preds.min())
 
         return {
             "mse": mse(all_scores, all_preds),
@@ -289,7 +290,8 @@ def parse_args():
         "--test_dataset_names",
         type=str,
         nargs="+",
-        default=["relate", "audiocap", "musiccap", "xacle", "aishell7b"],
+        # default=["relate", "audiocap", "musiccap", "xacle", "aishell7b"],
+        default=["relate", "audiocap", "musiccap"],
         help="List of dataset names to test on",
     )
     # logging
@@ -335,7 +337,6 @@ if __name__ == "__main__":
     )
 
     if args.mode == "train":
-        evaluator.train()
+        raise NotImplementedError("Training mode is currently disabled.")
     elif args.mode == "test":
-        evaluator.load_model("best_model.pt")
         evaluator.test()

@@ -737,6 +737,19 @@ wheels = [
 ]
 
 [[package]]
+name = "hear21passt"
+version = "0.0.26"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "timm" },
+    { name = "torchaudio" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/9e/4d/53efcc38f947303fc52547c0bbcbfe8a0d0dec5abb8217bd377dfb65430d/hear21passt-0.0.26.tar.gz", hash = "sha256:9aa91cef4ca6468d9075092a9c377b09270b5a59dfa83ecdd4ce9ea92c8c8431", size = 23681, upload-time = "2024-01-02T11:29:19.529Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e8/9d/d14d332d831125ff9aab91df8dec4f2707219e9136b6d1dc77cf8a7dae89/hear21passt-0.0.26-py3-none-any.whl", hash = "sha256:a3a7377604c6d829369111ab26a86fc5dd40154ec611b8fa5819ecaa6b252550", size = 33541, upload-time = "2024-01-02T11:29:18.004Z" },
+]
+
+[[package]]
 name = "hf-xet"
 version = "1.2.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2832,6 +2845,7 @@ name = "ttaeval"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "hear21passt" },
     { name = "laion-clap" },
     { name = "matplotlib" },
     { name = "msclap" },
@@ -2849,6 +2863,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "hear21passt", specifier = ">=0.0.26" },
     { name = "laion-clap", specifier = ">=1.1.6" },
     { name = "matplotlib", specifier = ">=3.10.7" },
     { name = "msclap", specifier = ">=1.3.4" },
