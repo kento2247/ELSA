@@ -18,6 +18,7 @@ dependencies = [
     "sam-audio",
     "torchcodec==0.5",
     "xformers",
+    "soundfile>=0.13.1",
 ]
 
 [tool.uv.sources]
