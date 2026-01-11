@@ -31,3 +31,8 @@ sam-audio = { git = "https://github.com/kento2247/sam-audio.git", rev = "91f99d7
 name     = "pytorch-cu118"
 url      = "https://download.pytorch.org/whl/cu118"
 explicit = true
+
+[dependency-groups]
+dev = [
+    "flask>=3.0.0",
+]
