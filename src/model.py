@@ -81,6 +81,6 @@ class TTAEvalModel(nn.Module):
         encoded = self.transformer_encoder(sequence)  # [B, 5, D]
 
         cls_output = encoded[:, 0, :]  # [B, D]
-        preds = self.head(cls_output)  # [B, 1]
+        preds = self.mlp(cls_output)  # [B, 1]
 
         return preds
