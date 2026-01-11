@@ -19,7 +19,6 @@ class TTADataset(Dataset):
             "relate",
             "audiocap",
             "musiccap",
-            "xacle",
             "aishell7b",
         ],
         split: Literal["train", "val", "test"] = "train",
@@ -257,7 +256,9 @@ class TTADataset(Dataset):
         mos_list_path = os.path.join(
             self.data_dir, "MusicEval-full", "sets", f"{split_name}_mos_list.txt"
         )
-        mos_data = pd.read_csv(mos_list_path, header=None, names=["filename", "ovl", "rel"])
+        mos_data = pd.read_csv(
+            mos_list_path, header=None, names=["filename", "ovl", "rel"]
+        )
 
         for index, row in tqdm(
             mos_data.iterrows(),
@@ -355,6 +356,16 @@ class TTADataset(Dataset):
         )
         data["laionclap_text"] = self._load_pre_extracted_feats(
             feats_name="laionclap_text",
+            dataset_name=dataset_name,
+            file_name=text_file_name,
+        )
+        data["humanclap_audio"] = self._load_pre_extracted_feats(
+            feats_name="humanclap_audio",
+            dataset_name=dataset_name,
+            file_name=audio_file_name,
+        )
+        data["humanclap_text"] = self._load_pre_extracted_feats(
+            feats_name="humanclap_text",
             dataset_name=dataset_name,
             file_name=text_file_name,
         )

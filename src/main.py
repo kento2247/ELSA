@@ -5,11 +5,12 @@ import time
 
 import numpy as np
 import torch
+from torch.utils.data import DataLoader
+from tqdm import tqdm
+
 import wandb
 from dataset import TTADataset
 from model import TTAEvalModel
-from torch.utils.data import DataLoader
-from tqdm import tqdm
 from utils.eval_methods import (
     kendall_tau,
     mse,
@@ -289,7 +290,7 @@ def parse_args():
         "--test_dataset_names",
         type=str,
         nargs="+",
-        default=["relate", "audiocap", "musiccap", "xacle", "aishell7b"],
+        default=["relate", "audiocap", "musiccap", "aishell7b"],
         help="List of dataset names to test on",
     )
     # logging
