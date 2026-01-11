@@ -35,7 +35,7 @@ class TTAEvalModel(nn.Module):
 
         # Head MLP
         self.mlp = nn.Sequential(
-            nn.Linear(embedding_dim * 4, embedding_dim),
+            nn.Linear(embedding_dim, embedding_dim),
             nn.ReLU(),
             nn.LayerNorm(embedding_dim),
             nn.Dropout(dropout),
