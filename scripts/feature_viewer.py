@@ -33,7 +33,7 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AudioCapEval Feature Viewer</title>
+    <title>TTAEval Feature Viewer</title>
     <style>
         * { box-sizing: border-box; }
         body {
@@ -162,7 +162,7 @@ HTML_TEMPLATE = """
 </head>
 <body>
     <div class="container">
-        <h1>AudioCapEval Feature Viewer</h1>
+        <h1>TTAEval Feature Viewer</h1>
 
         <div class="nav-bar">
             <div>
