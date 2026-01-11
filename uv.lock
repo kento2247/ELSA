@@ -2604,18 +2604,15 @@ wheels = [
 
 [[package]]
 name = "timm"
-version = "1.0.22"
+version = "0.4.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "huggingface-hub" },
-    { name = "pyyaml" },
-    { name = "safetensors" },
     { name = "torch" },
     { name = "torchvision" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c5/9d/e4670765d1c033f97096c760b3b907eeb659cf80f3678640e5f060b04c6c/timm-1.0.22.tar.gz", hash = "sha256:14fd74bcc17db3856b1a47d26fb305576c98579ab9d02b36714a5e6b25cde422", size = 2382998, upload-time = "2025-11-05T04:06:09.377Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e0/a5/5572fdafb728f1da08b9659897eb138ff6f7f2bc923fcd2a36054144bcab/timm-0.4.5.tar.gz", hash = "sha256:613f0ef4ded491b1bf6dff6053d3c8361fa20517c7ac9c7c388064a2b5890139", size = 228496, upload-time = "2021-03-08T00:32:53.446Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d6/14/fc04d491527b774ec7479897f5861959209de1480e4c4cd32ed098ff8bea/timm-1.0.22-py3-none-any.whl", hash = "sha256:888981753e65cbaacfc07494370138b1700a27b1f0af587f4f9b47bc024161d0", size = 2530238, upload-time = "2025-11-05T04:06:06.823Z" },
+    { url = "https://files.pythonhosted.org/packages/9e/89/d94f59780b5dd973154bf506d8ce598f6bfe7cc44dd445d644d6d3be8c39/timm-0.4.5-py3-none-any.whl", hash = "sha256:8699f644a60527005db07f31ceffef5349c4d144749e1243733c64220a7d6f92", size = 287415, upload-time = "2021-03-08T00:32:51.66Z" },
 ]
 
 [[package]]
@@ -2838,6 +2835,7 @@ dependencies = [
     { name = "pandas" },
     { name = "ruff" },
     { name = "sam-audio" },
+    { name = "timm" },
     { name = "torch" },
     { name = "torchaudio" },
     { name = "torchcodec" },
@@ -2855,6 +2853,7 @@ requires-dist = [
     { name = "pandas", specifier = ">=2.3.3" },
     { name = "ruff", specifier = ">=0.14.9" },
     { name = "sam-audio", git = "https://github.com/kento2247/sam-audio.git?rev=91f99d7d5e90b73dcbbe4ba4f617995c918a3f7e" },
+    { name = "timm", specifier = "==0.4.5" },
     { name = "torch", specifier = ">=2.7.0", index = "https://download.pytorch.org/whl/cu118" },
     { name = "torchaudio", specifier = "==2.7.0", index = "https://download.pytorch.org/whl/cu118" },
     { name = "torchcodec", specifier = "==0.5" },
