@@ -338,4 +338,6 @@ if __name__ == "__main__":
     if args.mode == "train":
         ...
     elif args.mode == "test":
-        evaluator.test()
+        test_metrics = evaluator.test()
+        lb_text = format_leaderboard_text(evaluator.meta_data, test_metrics)
+        print(f"Leaderboard Text:\n{lb_text}")
