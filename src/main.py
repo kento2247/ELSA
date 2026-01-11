@@ -5,11 +5,12 @@ import time
 
 import numpy as np
 import torch
+from torch.utils.data import DataLoader
+from tqdm import tqdm
+
 import wandb
 from dataset import TTADataset
 from model import TTAEvalModel
-from torch.utils.data import DataLoader
-from tqdm import tqdm
 from utils.eval_methods import (
     kendall_tau,
     mse,
@@ -159,12 +160,12 @@ class TTAEval:
 
         with torch.no_grad():
             for batch in tqdm(data_loader, desc=desc):
-                laionclap_audio = batch["laionclap_audio"].to(self.device)
-                laionclap_text = batch["laionclap_text"].to(self.device)
+                humanclap_audio = batch["humanclap_audio"].to(self.device)
+                humanclap_text = batch["humanclap_text"].to(self.device)
                 scores = batch["score"].numpy()
 
                 preds = (
-                    self.model(laionclap_audio, laionclap_text)
+                    self.model(humanclap_audio, humanclap_text)
                     .squeeze(-1)
                     .cpu()
                     .numpy()

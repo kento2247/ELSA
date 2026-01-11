@@ -3,39 +3,8 @@ import torch.nn as nn
 
 
 class TTAEvalModel(nn.Module):
-    def __init__(
-        self,
-        embedding_dim: int = 512,
-        num_heads: int = 8,
-        num_layers: int = 8,
-        dropout: float = 0.1,
-    ):
+    def __init__(self):
         super().__init__()
-        self.embedding_dim = embedding_dim
-
-        # CLS token (learnable)
-        self.cls_token = nn.Parameter(torch.randn(1, 1, embedding_dim))
-
-        # Transformer Encoder
-        self.transformer_encoder = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(
-                d_model=embedding_dim,
-                nhead=num_heads,
-                dim_feedforward=embedding_dim * 4,
-                dropout=dropout,
-                activation="gelu",
-                batch_first=True,
-            ),
-            num_layers=num_layers,
-        )
-
-        # Head MLP
-        self.head = nn.Sequential(
-            nn.Linear(embedding_dim, embedding_dim // 2),
-            nn.GELU(),
-            nn.LayerNorm(embedding_dim // 2),
-            nn.Linear(embedding_dim // 2, 1),
-        )
 
     def forward(
         self, audio_feats: torch.Tensor, text_feats: torch.Tensor
@@ -50,24 +19,16 @@ class TTAEvalModel(nn.Module):
         Returns:
             Similarity scores [B, 1]
         """
-        B = audio_feats.size(0)
+        audio_feats = audio_feats / audio_feats.norm(dim=-1, keepdim=True)
+        text_feats = text_feats / text_feats.norm(dim=-1, keepdim=True)
 
-        hadamard_product = audio_feats * text_feats  # [B, D]
-        diff = audio_feats - text_feats  # [B, D]
+        logits_per_audio = torch.matmul(
+            audio_feats, text_feats.t()
+        )  # [B, B] cosine similarity matrix
+        logits_per_text = torch.matmul(
+            text_feats, audio_feats.t()
+        )  # [B, B] cosine similarity matrix
 
-        sequence = torch.cat(
-            [
-                self.cls_token.expand(B, -1, -1),  # [B, 1, D]
-                hadamard_product.unsqueeze(1),  # [B, 1, D]
-                diff.unsqueeze(1),  # [B, 1, D]
-                audio_feats.unsqueeze(1),  # [B, 1, D]
-                text_feats.unsqueeze(1),  # [B, 1, D]
-            ],
-            dim=1,
-        )
-        encoded = self.transformer_encoder(sequence)  # [B, 5, D]
+        scores = (logits_per_audio.diag() + logits_per_text.diag()) / 2  # [B]
 
-        cls_output = encoded[:, 0, :]  # [B, D]
-        preds = self.head(cls_output)  # [B, 1]
-
-        return preds
+        return scores
