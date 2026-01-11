@@ -6,8 +6,8 @@ class TTAEvalModel(nn.Module):
     def __init__(
         self,
         embedding_dim: int = 512,
+        num_layers: int = 4,
         num_heads: int = 8,
-        num_layers: int = 8,
         dropout: float = 0.1,
         num_metrics: int = 2,
     ):
@@ -34,11 +34,12 @@ class TTAEvalModel(nn.Module):
         )
 
         # Head MLP
-        self.head = nn.Sequential(
-            nn.Linear(embedding_dim, embedding_dim // 2),
-            nn.GELU(),
-            nn.LayerNorm(embedding_dim // 2),
-            nn.Linear(embedding_dim // 2, 1),
+        self.mlp = nn.Sequential(
+            nn.Linear(embedding_dim * 4, embedding_dim),
+            nn.ReLU(),
+            nn.LayerNorm(embedding_dim),
+            nn.Dropout(dropout),
+            nn.Linear(embedding_dim, 1),
         )
 
     def forward(
