@@ -27,4 +27,5 @@ class TTAEvalModel(nn.Module):
         audio_feats = F.normalize(audio_feats, p=2, dim=-1)
         text_feats = F.normalize(text_feats, p=2, dim=-1)
         similarity = torch.sum(audio_feats * text_feats, dim=-1)
+        similarity = torch.clamp(similarity, min=0.0, max=1.0)
         return similarity
