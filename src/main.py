@@ -157,9 +157,11 @@ class TTAEval:
         self.model.eval()
         all_preds: list[np.ndarray] = []
         all_scores: list[np.ndarray] = []
+        all_audio_file_paths: list[str] = []
 
         with torch.no_grad():
             for batch in tqdm(data_loader, desc=desc):
+                audio_file_path = batch["audio_file_path"]
                 laionclap_audio = batch["laionclap_audio"].to(self.device)
                 laionclap_text = batch["laionclap_text"].to(self.device)
                 scores = batch["score"].numpy()
@@ -173,6 +175,7 @@ class TTAEval:
 
                 all_preds.append(preds)
                 all_scores.append(scores)
+                all_audio_file_paths.extend(audio_file_path)
 
         all_preds = np.concatenate(all_preds)
         all_scores = np.concatenate(all_scores)
@@ -186,6 +189,7 @@ class TTAEval:
             },
             "y_list": all_scores,
             "y_hat_list": all_preds,
+            "audio_file_paths": all_audio_file_paths,
         }
 
     def test(self) -> dict:
@@ -218,10 +222,13 @@ class TTAEval:
 
                 if subjective_metric not in metrics:
                     metrics[subjective_metric] = {}
+                if subjective_metric not in scores:
+                    scores[subjective_metric] = {}
                 metrics[subjective_metric][test_dataset_name] = eval_metrics
                 scores[subjective_metric][test_dataset_name] = {
                     "y_list": eval_result["y_list"],
                     "y_hat_list": eval_result["y_hat_list"],
+                    "audio_file_paths": eval_result["audio_file_paths"],
                 }
 
         if self.log_wandb:
