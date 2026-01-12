@@ -172,7 +172,7 @@ class TTAEval:
                 ref_audio = batch["ref_audio"].to(self.device)
                 has_ref_audio = batch["has_ref_audio"]
                 scores = batch["score"].numpy()
-                metric_ids = batch["subjective_metric_id"].to(self.device)  # [B]
+                audio_file_paths = batch["audio_file_path"]  # list of strings
 
                 # Only process samples with reference audio
                 mask = has_ref_audio.numpy()
@@ -182,19 +182,25 @@ class TTAEval:
                 audio = audio[mask]
                 ref_audio = ref_audio[mask]
                 scores = scores[mask]
+                audio_file_paths = [p for p, m in zip(audio_file_paths, mask) if m]
 
                 preds = self.model(audio, ref_audio).cpu().numpy()
 
                 all_preds.append(preds)
                 all_scores.append(scores)
-                all_audio_file_paths.extend(audio_file_path)
+                all_audio_file_paths.extend(audio_file_paths)
 
         if len(all_preds) == 0:
             return {
-                "mse": float("nan"),
-                "pearson": float("nan"),
-                "spearman": float("nan"),
-                "kendall_tau": float("nan"),
+                "metrics": {
+                    "mse": float("nan"),
+                    "pearson": float("nan"),
+                    "spearman": float("nan"),
+                    "kendall_tau": float("nan"),
+                },
+                "y_list": np.array([]),
+                "y_hat_list": np.array([]),
+                "audio_file_paths": [],
             }
 
         all_preds = np.concatenate(all_preds)

@@ -343,37 +343,6 @@ class TTADataset(Dataset):
             data["ref_audio"] = torch.zeros_like(data["audio"])
             data["has_ref_audio"] = False
 
-        # data["audio"] = self._load_wav(data["audio_file_path"])
-        data["msclap_audio"] = self._load_pre_extracted_feats(
-            feats_name="msclap_audio",
-            dataset_name=dataset_name,
-            file_name=audio_file_name,
-        )
-        data["msclap_text"] = self._load_pre_extracted_feats(
-            feats_name="msclap_text",
-            dataset_name=dataset_name,
-            file_name=text_file_name,
-        )
-        data["laionclap_audio"] = self._load_pre_extracted_feats(
-            feats_name="laionclap_audio",
-            dataset_name=dataset_name,
-            file_name=audio_file_name,
-        )
-        data["laionclap_text"] = self._load_pre_extracted_feats(
-            feats_name="laionclap_text",
-            dataset_name=dataset_name,
-            file_name=text_file_name,
-        )
-        data["humanclap_audio"] = self._load_pre_extracted_feats(
-            feats_name="humanclap_audio",
-            dataset_name=dataset_name,
-            file_name=audio_file_name,
-        )
-        data["humanclap_text"] = self._load_pre_extracted_feats(
-            feats_name="humanclap_text",
-            dataset_name=dataset_name,
-            file_name=text_file_name,
-        )
         return data
 
     def __getitem__(self, idx):
