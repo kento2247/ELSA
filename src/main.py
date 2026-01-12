@@ -106,22 +106,25 @@ class TTAEval:
 
             if (epoch - 1) % self.eval_freq == 0:
                 val_metrics = self.evaluate(val_loader, desc="Validation")["metrics"]
-                print(f"Epoch {epoch}/{self.epochs} - Val Metrics: {val_metrics}")
+                val_metric = val_metrics[self.main_metric]
+                is_best_epoch = val_metric > best_val_metric
+
+                print(
+                    f"Epoch {epoch}/{self.epochs} - Val Metrics: {val_metrics}, Best: {is_best_epoch}"
+                )
 
                 if self.log_wandb:
                     wandb.log({"epoch": epoch, "val": val_metrics})
 
                 print(f"Running test at epoch {epoch}...")
-                test_metrics = self.test()
+                test_metrics = self.test(
+                    save_qualitative=self.save_qualitative and is_best_epoch
+                )
 
-                val_metric = val_metrics[self.main_metric]
-                if val_metric > best_val_metric:
+                if is_best_epoch:
                     best_val_metric = val_metric
                     best_epoch = epoch
                     self.save_model("best_model.pt")
-                    print(
-                        f"Best model saved with val_{self.main_metric}: {val_metric:.4f}"
-                    )
                     best_test_metrics = test_metrics
 
         print(f"Training completed. Best epoch: {best_epoch}")
@@ -140,9 +143,13 @@ class TTAEval:
             laionclap_audio = batch["laionclap_audio"].to(self.device)
             laionclap_text = batch["laionclap_text"].to(self.device)
             scores = batch["score"].float().to(self.device)
+            metric_ids = batch["subjective_metric_id"].to(self.device)  # [B]
 
             self.optimizer.zero_grad()
-            preds = self.model(laionclap_audio, laionclap_text).squeeze(-1)
+            preds = self.model(laionclap_audio, laionclap_text, metric_ids).squeeze(
+                -1
+            )  # [B]
+
             loss = self.criterion(preds, scores)
             loss.backward()
             self.optimizer.step()
@@ -165,13 +172,12 @@ class TTAEval:
                 laionclap_audio = batch["laionclap_audio"].to(self.device)
                 laionclap_text = batch["laionclap_text"].to(self.device)
                 scores = batch["score"].numpy()
+                metric_ids = batch["subjective_metric_id"].to(self.device)  # [B]
 
-                preds = (
-                    self.model(laionclap_audio, laionclap_text)
-                    .squeeze(-1)
-                    .cpu()
-                    .numpy()
-                )
+                preds = self.model(
+                    laionclap_audio, laionclap_text, metric_ids
+                )  # [B, 1]
+                preds = preds.squeeze(-1).cpu().numpy()  # [B]
 
                 all_preds.append(preds)
                 all_scores.append(scores)
@@ -192,7 +198,7 @@ class TTAEval:
             "audio_file_paths": all_audio_file_paths,
         }
 
-    def test(self) -> dict:
+    def test(self, save_qualitative: bool = False) -> dict:
         """Test the model on test datasets and log metrics."""
         metrics: dict = {}
         scores: dict = {}
@@ -234,7 +240,7 @@ class TTAEval:
         if self.log_wandb:
             wandb.log(metrics)
 
-        if self.save_qualitative:
+        if save_qualitative:
             os.makedirs(self.model_dir, exist_ok=True)
             # Convert numpy arrays to lists for JSON serialization
             scores_serializable = {}
@@ -367,4 +373,4 @@ if __name__ == "__main__":
         evaluator.train()
     elif args.mode == "test":
         evaluator.load_model("best_model.pt")
-        evaluator.test()
+        evaluator.test(save_qualitative=args.save_qualitative)
