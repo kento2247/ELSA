@@ -105,7 +105,7 @@ class TTAEval:
                 wandb.log({"epoch": epoch, "train_loss": train_loss})
 
             if (epoch - 1) % self.eval_freq == 0:
-                val_metrics = self.evaluate(val_loader, desc="Validation")
+                val_metrics = self.evaluate(val_loader, desc="Validation")["metrics"]
                 print(f"Epoch {epoch}/{self.epochs} - Val Metrics: {val_metrics}")
 
                 if self.log_wandb:
@@ -178,15 +178,20 @@ class TTAEval:
         all_scores = np.concatenate(all_scores)
 
         return {
-            "mse": mse(all_scores, all_preds),
-            "pearson": pearson_correlation(all_scores, all_preds),
-            "spearman": spearman_correlation(all_scores, all_preds),
-            "kendall_tau": kendall_tau(all_scores, all_preds),
+            "metrics": {
+                "mse": mse(all_scores, all_preds),
+                "pearson": pearson_correlation(all_scores, all_preds),
+                "spearman": spearman_correlation(all_scores, all_preds),
+                "kendall_tau": kendall_tau(all_scores, all_preds),
+            },
+            "y_list": all_scores,
+            "y_hat_list": all_preds,
         }
 
     def test(self) -> dict:
         """Test the model on test datasets and log metrics."""
         metrics: dict = {}
+        scores: dict = {}
 
         for subjective_metric in self.subjective_metrics:
             for test_dataset_name in self.test_dataset_names:
@@ -208,11 +213,16 @@ class TTAEval:
                 del test_dataset
 
                 desc = f"Testing {subjective_metric}/{test_dataset_name}"
-                eval_metrics = self.evaluate(test_loader, desc=desc)
+                eval_result = self.evaluate(test_loader, desc=desc)
+                eval_metrics = eval_result["metrics"]
 
                 if subjective_metric not in metrics:
                     metrics[subjective_metric] = {}
                 metrics[subjective_metric][test_dataset_name] = eval_metrics
+                scores[subjective_metric][test_dataset_name] = {
+                    "y_list": eval_result["y_list"],
+                    "y_hat_list": eval_result["y_hat_list"],
+                }
 
         if self.log_wandb:
             wandb.log(metrics)
@@ -222,6 +232,7 @@ class TTAEval:
             qualitative_data = {
                 "metrics": metrics,
                 "meta_data": self.meta_data,
+                "scores": scores,
             }
             qualitative_path = os.path.join(self.model_dir, "qualitative_results.json")
             with open(qualitative_path, "w") as f:
