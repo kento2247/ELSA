@@ -2,11 +2,14 @@ import argparse
 import json
 import os
 import re
+from typing import List
 
 import laion_clap
 import torch
 import torchaudio
+from google import genai
 from msclap import CLAP
+from pydantic import BaseModel, Field
 from sam_audio import SAMAudio, SAMAudioProcessor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -131,6 +134,45 @@ class HumanCLAPEmbedder:
             ).to(0)
             audio_embeddings = self.model.get_audio_features(**inputs)
         return audio_embeddings.to(self.dtype)
+
+
+class SoundEvents(BaseModel):
+    """Pydantic model for structured output of sound events."""
+
+    events: List[str] = Field(
+        description="List of sound events extracted from the caption."
+    )
+
+
+class GeminiTextParser:
+    def __init__(self, model_name: str = "gemini-2.5-flash"):
+        api_key = os.environ.get("GOOGLE_API_KEY")
+        if api_key is None:
+            api_key = input("Enter your Google API key: ")
+        self.client = genai.Client(api_key=api_key)
+        self.model_name = model_name
+        self.system_prompt = """Split the caption into separate sound events. Keep all modifiers (adjectives, adverbs, descriptions).
+
+Example:
+Caption: A large dog barks loudly while heavy rain falls on the metal roof.
+Output: ["A large dog barks loudly", "heavy rain falls on the metal roof"]"""
+
+    def parse_texts(self, texts: list[str]) -> list[list[str]]:
+        """Parse texts in batch and return list of sound events for each text."""
+        responses = []
+        for text in texts:
+            prompt = f"{self.system_prompt}\n\nCaption: {text}\n\nOutput:"
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt,
+                config={
+                    "response_mime_type": "application/json",
+                    "response_json_schema": SoundEvents.model_json_schema(),
+                },
+            )
+            sound_events = SoundEvents.model_validate_json(response.text)
+            responses.append(sound_events.events)
+        return responses
 
 
 class QwenTextParser:
@@ -528,8 +570,9 @@ def laionclap_extract(dataloader, feats_dir: str):
 
 
 def text_parse(dataloader, feats_dir: str):
-    qwen_text_parser = QwenTextParser()
-    for batch in tqdm(dataloader, desc="Parsing Text with Qwen"):
+    text_parser = GeminiTextParser()
+    # text_parser = QwenTextParser()
+    for batch in tqdm(dataloader, desc="Parsing Text with Gemini"):
         texts = batch["text"]
         text_ids = batch["text_id"]
         datasets = batch["dataset"]
@@ -546,8 +589,8 @@ def text_parse(dataloader, feats_dir: str):
         if all_exist:
             continue
 
-        # Implement text parsing logic here using qwen_text_parser
-        audio_sources: list[str] = qwen_text_parser.parse_texts(texts)
+        # Parse texts using Gemini
+        audio_sources: list[list[str]] = text_parser.parse_texts(texts)
 
         for text_id, dataset, sources in zip(text_ids, datasets, audio_sources):
             save_path = os.path.join(
