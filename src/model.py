@@ -33,5 +33,6 @@ class TTAEvalModel(nn.Module):
         sim_1 = torch.sum(audio_feats * pam_prompt_1, dim=-1, keepdim=True)
         sim_2 = torch.sum(audio_feats * pam_prompt_2, dim=-1, keepdim=True)
         logits = torch.cat([sim_1, sim_2], dim=-1) * logit_scale
-        similarity = F.softmax(logits, dim=-1)
-        return similarity[:, 0]
+        similarity = F.softmax(logits, dim=-1)[:, 0]
+        similarity = torch.clamp(similarity, min=0.0, max=1.0)
+        return similarity
