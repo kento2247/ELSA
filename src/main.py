@@ -236,10 +236,20 @@ class TTAEval:
 
         if self.save_qualitative:
             os.makedirs(self.model_dir, exist_ok=True)
+            # Convert numpy arrays to lists for JSON serialization
+            scores_serializable = {}
+            for metric_name, datasets in scores.items():
+                scores_serializable[metric_name] = {}
+                for dataset_name, data in datasets.items():
+                    scores_serializable[metric_name][dataset_name] = {
+                        "y_list": [float(y) for y in data["y_list"]],
+                        "y_hat_list": [float(y) for y in data["y_hat_list"]],
+                        "audio_file_paths": data["audio_file_paths"],
+                    }
             qualitative_data = {
                 "metrics": metrics,
                 "meta_data": self.meta_data,
-                "scores": scores,
+                "scores": scores_serializable,
             }
             qualitative_path = os.path.join(self.model_dir, "qualitative_results.json")
             with open(qualitative_path, "w") as f:
