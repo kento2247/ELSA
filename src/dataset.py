@@ -19,7 +19,6 @@ class TTADataset(Dataset):
             "relate",
             "audiocap",
             "musiccap",
-            "xacle",
             "aishell7b",
         ],
         split: Literal["train", "val", "test"] = "train",
