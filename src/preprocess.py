@@ -548,12 +548,12 @@ def text_parse(dataloader, feats_dir: str):
 
         # Implement text parsing logic here using qwen_text_parser
         audio_sources: list[str] = qwen_text_parser.parse_texts(texts)
-        audio_sources = [list(set(sources)) for sources in audio_sources]
 
         for text_id, dataset, sources in zip(text_ids, datasets, audio_sources):
             save_path = os.path.join(
                 feats_dir, "parsed_texts", dataset, f"{text_id}.json"
             )
+            sources = list(set(sources))  # remove duplicates
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
             with open(save_path, "w") as f:
                 json.dump(sources, f, ensure_ascii=False, indent=0)
