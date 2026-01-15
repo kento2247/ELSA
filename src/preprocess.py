@@ -548,6 +548,7 @@ def text_parse(dataloader, feats_dir: str):
 
         # Implement text parsing logic here using qwen_text_parser
         audio_sources: list[str] = qwen_text_parser.parse_texts(texts)
+        audio_sources = [list(set(sources)) for sources in audio_sources]
 
         for text_id, dataset, sources in zip(text_ids, datasets, audio_sources):
             save_path = os.path.join(
