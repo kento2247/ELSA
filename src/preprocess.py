@@ -298,7 +298,7 @@ class SamAudio:
             with torch.no_grad():
                 batch = self.processor(
                     audios=[audio_file],
-                    prompts=[prompt],
+                    descriptions=[prompt],
                 ).to(self.device)
                 # Only convert audio tensors to dtype, keep index tensors as int64
                 batch.audios = batch.audios.to(self.dtype)
