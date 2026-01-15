@@ -282,7 +282,7 @@ class SamAudio:
         prompts: list[str],
         predict_spans: bool = False,
         reranking_candidates: int = 1,
-    ) -> dict[str, torch.Tensor]:
+    ) -> list[torch.Tensor]:
         """
         Separate audio based on text prompts.
         Args:
@@ -291,9 +291,9 @@ class SamAudio:
             predict_spans: Whether to predict spans (better quality but slower).
             reranking_candidates: Number of reranking candidates.
         Returns:
-            Dict mapping prompt to separated audio tensor.
+            List of separated audio tensors.
         """
-        separated_audios = {}
+        separated_audios = []
         for prompt in prompts:
             with torch.no_grad():
                 batch = self.processor(
@@ -308,7 +308,7 @@ class SamAudio:
                     reranking_candidates=reranking_candidates,
                 )
 
-            separated_audios[prompt] = result.target[0]
+            separated_audios.append(result.target[0])
         return separated_audios
 
     def save_audio(
@@ -581,12 +581,12 @@ def audio_parse(dataloader, feats_dir: str):
                 continue
 
             # Split audio using SAM-Audio
-            separated_audios: dict[str, torch.Tensor] = sam_audio.separate_audio(
+            separated_audios: list[torch.Tensor] = sam_audio.separate_audio(
                 audio_file, audio_sources
             )
 
             # Save separated audio files
-            for i, (source, audio_tensor) in enumerate(separated_audios.items()):
+            for i, audio_tensor in enumerate(separated_audios):
                 save_path = os.path.join(save_dir, f"{i}.wav")
                 sam_audio.save_audio(save_path, audio_tensor)
 
