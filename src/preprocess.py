@@ -279,26 +279,26 @@ class SamAudio:
     def separate_audio(
         self,
         audio_file: str,
-        descriptions: list[str],
+        prompts: list[str],
         predict_spans: bool = False,
         reranking_candidates: int = 1,
     ) -> dict[str, torch.Tensor]:
         """
-        Separate audio based on text descriptions.
+        Separate audio based on text prompts.
         Args:
             audio_file: Path to audio file.
-            descriptions: List of text descriptions for separation.
+            prompts: List of text prompts for separation.
             predict_spans: Whether to predict spans (better quality but slower).
             reranking_candidates: Number of reranking candidates.
         Returns:
-            Dict mapping description to separated audio tensor.
+            Dict mapping prompt to separated audio tensor.
         """
         separated_audios = {}
-        for description in descriptions:
+        for prompt in prompts:
             with torch.no_grad():
                 batch = self.processor(
                     audios=[audio_file],
-                    descriptions=[description],
+                    prompts=[prompt],
                 ).to(self.device)
                 # Only convert audio tensors to dtype, keep index tensors as int64
                 batch.audios = batch.audios.to(self.dtype)
@@ -308,7 +308,7 @@ class SamAudio:
                     reranking_candidates=reranking_candidates,
                 )
 
-            separated_audios[description] = result.target[0]
+            separated_audios[prompt] = result.target[0]
         return separated_audios
 
     def save_audio(
@@ -559,34 +559,34 @@ def text_parse(dataloader, feats_dir: str):
                 json.dump(sources, f, ensure_ascii=False, indent=0)
 
 
-def music_parse(dataloader, feats_dir: str):
-    """Parse music audio using SAM-Audio based on splited text"""
+def audio_parse(dataloader, feats_dir: str):
+    """Parse audio using SAM-Audio based on parsed text sources"""
     sam_audio = SamAudio()
-    for batch in tqdm(dataloader, desc="Parsing Music with SAM-Audio"):
+    for batch in tqdm(dataloader, desc="Parsing Audio with SAM-Audio"):
         audio_files = batch["audio_file_path"]
         text_ids = batch["text_id"]
         datasets = batch["dataset"]
 
         for text_id, dataset, audio_file in zip(text_ids, datasets, audio_files):
-            # Load parsed text prompts
+            # Load parsed audio sources
             text_path = os.path.join(
                 feats_dir, "parsed_texts", dataset, f"{text_id}.json"
             )
             with open(text_path, "r") as f:
-                text_prompts = json.load(f)
+                audio_sources = json.load(f)
             save_dir = os.path.join(feats_dir, "separated_audio", dataset, text_id)
             os.makedirs(save_dir, exist_ok=True)
 
-            if os.listdir(save_dir) == len(text_prompts):
+            if os.listdir(save_dir) == len(audio_sources):
                 continue
 
             # Split audio using SAM-Audio
             separated_audios: dict[str, torch.Tensor] = sam_audio.separate_audio(
-                audio_file, text_prompts
+                audio_file, audio_sources
             )
 
             # Save separated audio files
-            for i, (description, audio_tensor) in enumerate(separated_audios.items()):
+            for i, (source, audio_tensor) in enumerate(separated_audios.items()):
                 save_path = os.path.join(save_dir, f"{i}.wav")
                 sam_audio.save_audio(save_path, audio_tensor)
 
@@ -617,12 +617,12 @@ def embed_parsed_data(
         datasets = batch["dataset"]
 
         for text_id, dataset in zip(text_ids, datasets):
-            # Load parsed text prompts
+            # Load parsed audio sources
             text_path = os.path.join(
                 feats_dir, "parsed_texts", dataset, f"{text_id}.json"
             )
             with open(text_path, "r") as f:
-                text_prompts: list[str] = json.load(f)
+                audio_sources: list[str] = json.load(f)
 
             # Load separated audio files
             audio_dir = os.path.join(feats_dir, "separated_audio", dataset, text_id)
@@ -636,7 +636,7 @@ def embed_parsed_data(
 
             # Embed audio and text
             audio_embeddings = embedder.embed_audios(audio_files)  # [N, D]
-            text_embeddings = embedder.embed_texts(text_prompts)  # [N, D]
+            text_embeddings = embedder.embed_texts(audio_sources)  # [N, D]
 
             num_segments = len(audio_files)
             embed_dim = audio_embeddings.shape[-1]
@@ -703,7 +703,7 @@ def main(args):
     clear_gpu_memory()
     text_parse(dataloader, args.feats_dir)
     clear_gpu_memory()
-    music_parse(dataloader, args.feats_dir)
+    audio_parse(dataloader, args.feats_dir)
 
 
 ### argument parser ###
