@@ -573,6 +573,11 @@ def music_parse(dataloader, feats_dir: str):
             )
             with open(text_path, "r") as f:
                 text_prompts = json.load(f)
+            save_dir = os.path.join(feats_dir, "separated_audio", dataset, text_id)
+            os.makedirs(save_dir, exist_ok=True)
+
+            if os.listdir(save_dir) == len(text_prompts):
+                continue
 
             # Split audio using SAM-Audio
             separated_audios: dict[str, torch.Tensor] = sam_audio.separate_audio(
@@ -581,8 +586,6 @@ def music_parse(dataloader, feats_dir: str):
 
             # Save separated audio files
             for i, (description, audio_tensor) in enumerate(separated_audios.items()):
-                save_dir = os.path.join(feats_dir, "separated_audio", dataset, text_id)
-                os.makedirs(save_dir, exist_ok=True)
                 save_path = os.path.join(save_dir, f"{i}.wav")
                 sam_audio.save_audio(save_path, audio_tensor)
 
@@ -691,15 +694,15 @@ def main(args):
     dataset = TTAPreprocessDataset(data_dir=args.data_dir, split=args.split)
     dataloader = DataLoader(dataset, batch_size=args.bs, shuffle=False)
 
-    humanclap_extract(dataloader, args.feats_dir)
-    clear_gpu_memory()
-    laionclap_extract(dataloader, args.feats_dir)
-    clear_gpu_memory()
-    msclap_extract(dataloader, args.feats_dir, seed=args.seed)
+    # humanclap_extract(dataloader, args.feats_dir)
     # clear_gpu_memory()
-    # text_parse(dataloader, args.feats_dir)
+    # laionclap_extract(dataloader, args.feats_dir)
     # clear_gpu_memory()
-    # music_parse(dataloader, args.feats_dir)
+    # msclap_extract(dataloader, args.feats_dir, seed=args.seed)
+    clear_gpu_memory()
+    text_parse(dataloader, args.feats_dir)
+    clear_gpu_memory()
+    music_parse(dataloader, args.feats_dir)
 
 
 ### argument parser ###
