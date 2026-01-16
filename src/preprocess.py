@@ -149,15 +149,20 @@ class QwenTextParser:
     def _build_chat_template(self, text: str) -> str:
         """Build chat template from text"""
         system_prompt = "Output only a JSON array of strings."
-        user_prompt = f"""Split the caption into separate sound events. Keep all modifiers (adjectives, adverbs, descriptions).
+        user_prompt = f"""Split the caption into a list of distinct sound events.
+Preserve all modifiers (adjectives, adverbs, and descriptive phrases).
+Do NOT include any temporal or sequential information (e.g., order, timing, repetition, before/after).
+Do NOT output duplicate or semantically overlapping sound events.
+If the same sound event appears multiple times, keep only the most informative occurrence.
 
-        Caption: {text}
+Caption:
+{text}
 
-        Example:
-        Caption: A large dog barks loudly while heavy rain falls on the metal roof.
-        Output: ["A large dog barks loudly", "heavy rain falls on the metal roof"]
+Example:
+Caption: Birds chirp loudly in the distance; a person talks nearby; more chirping.
+Output: ["Birds chirp loudly in the distance", "A person talks nearby"]
 
-        Output:"""
+Output: """
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
@@ -700,7 +705,7 @@ def main(args):
     # laionclap_extract(dataloader, args.feats_dir)
     # clear_gpu_memory()
     # msclap_extract(dataloader, args.feats_dir, seed=args.seed)
-    clear_gpu_memory()
+    # clear_gpu_memory()
     text_parse(dataloader, args.feats_dir)
     clear_gpu_memory()
     audio_parse(dataloader, args.feats_dir)
