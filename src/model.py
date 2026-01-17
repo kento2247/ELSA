@@ -10,6 +10,51 @@ class TTAEvalModel(nn.Module):
         dropout: float = 0.1,
     ):
         super().__init__()
+        self.embedding_dim = embedding_dim
+
+    def _greedy_matching(
+        self,
+        audio_emb: torch.Tensor,
+        text_emb: torch.Tensor,
+        audio_mask: torch.Tensor,
+        text_mask: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Args:
+            audio_emb: Audio segment embeddings [B, S_a, D]
+            text_emb: Text phrase embeddings [B, S_t, D]
+            audio_mask: Valid audio segment mask [B, S_a]
+            text_mask: Valid text phrase mask [B, S_t]
+
+        Returns:
+            (Precision, Recall, F1) (3, B)
+        """
+        sim = torch.bmm(text_emb, audio_emb.transpose(1, 2))
+
+        mask = torch.bmm(
+            text_mask.unsqueeze(2).float(), audio_mask.unsqueeze(1).float()
+        )
+        mask = mask.to(sim.device)
+        sim = sim * mask
+
+        word_precision = sim.max(dim=2)[0]  # [B, S_t]
+
+        word_recall = sim.max(dim=1)[0]  # [B, S_a]
+
+        # precision
+        text_mask_float = text_mask.float().to(word_precision.device)
+        text_valid_counts = text_mask_float.sum(dim=1).clamp(min=1.0)
+        precision = (word_precision * text_mask_float).sum(dim=1) / text_valid_counts
+
+        # recall
+        audio_mask_float = audio_mask.float().to(word_recall.device)
+        audio_valid_counts = audio_mask_float.sum(dim=1).clamp(min=1.0)
+        recall = (word_recall * audio_mask_float).sum(dim=1) / audio_valid_counts
+
+        # F1
+        f1 = 2 * precision * recall / (precision + recall + 1e-8)
+
+        return precision, recall, f1
 
     def forward(
         self,
@@ -20,33 +65,103 @@ class TTAEvalModel(nn.Module):
         parsed_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
-        Compute similarity score using Transformer architecture.
+        Coarse-Grained (COGR): Global cosine similarity between audio and text embeddings.
+        Fine-Grained (FIGR): Greedy matching F1 score between parsed segments.
+
+        Final score = (COGR + FIGR_F1) / 2
 
         Args:
-            audio_feats: Audio features from MSCLAP [B, D]
-            text_feats: Text features from MSCLAP [B, D]
-            parsed_audio_feats: Parsed audio features [B, S, D] (optional)
-            parsed_text_feats: Parsed text features [B, S, D] (optional)
-            parsed_mask: Parsed feature mask [B, S] (optional)
+            audio_feats: [B, D]
+            text_feats: [B, D]
+            parsed_audio_feats: [B, S, D] (optional)
+            parsed_text_feats: [B, S, D] (optional)
+            parsed_mask: Valid segment mask [B, S] (optional)
 
         Returns:
-            Similarity scores [B, 1]
+            Similarity scores [B]
         """
         audio_feats = F.normalize(audio_feats, p=2, dim=-1)
         text_feats = F.normalize(text_feats, p=2, dim=-1)
-        base_similarity = torch.sum(audio_feats * text_feats, dim=-1)
+        cogr = torch.sum(audio_feats * text_feats, dim=-1)  # [B]
 
         if not all(
             isinstance(x, torch.Tensor)
             for x in (parsed_audio_feats, parsed_text_feats, parsed_mask)
         ):
-            return base_similarity
+            return cogr
 
         parsed_audio_feats = F.normalize(parsed_audio_feats, p=2, dim=-1)
         parsed_text_feats = F.normalize(parsed_text_feats, p=2, dim=-1)
-        parsed_similarity = torch.sum(parsed_audio_feats * parsed_text_feats, dim=-1)
-        mask = parsed_mask.to(parsed_similarity.device).float()
-        valid_counts = mask.sum(dim=-1).clamp(min=1.0)
-        parsed_mean = (parsed_similarity * mask).sum(dim=-1) / valid_counts
 
-        return (base_similarity + parsed_mean) / 2.0
+        mask = parsed_mask.to(parsed_audio_feats.device)
+
+        _, _, figr_f1 = self._greedy_matching(
+            audio_emb=parsed_audio_feats,
+            text_emb=parsed_text_feats,
+            audio_mask=mask,
+            text_mask=mask,
+        )
+
+        combined_score = (cogr + figr_f1) / 2.0
+
+        return combined_score
+
+    def forward_detailed(
+        self,
+        audio_feats: torch.Tensor,
+        text_feats: torch.Tensor,
+        parsed_audio_feats: torch.Tensor | None = None,
+        parsed_text_feats: torch.Tensor | None = None,
+        parsed_mask: torch.Tensor | None = None,
+    ) -> dict[str, torch.Tensor]:
+        """
+        Compute detailed EMScore metrics (for analysis/debugging).
+
+        Returns all individual components:
+        - cogr: Coarse-grained global similarity
+        - figr_p: Fine-grained precision
+        - figr_r: Fine-grained recall
+        - figr_f: Fine-grained F1
+        - full: Combined score (cogr + figr_f) / 2
+
+        Args:
+            audio_feats: Global audio features from MSCLAP [B, D]
+            text_feats: Global text features from MSCLAP [B, D]
+            parsed_audio_feats: Parsed audio segment features [B, S, D] (optional)
+            parsed_text_feats: Parsed text phrase features [B, S, D] (optional)
+            parsed_mask: Valid segment mask [B, S] (optional)
+
+        Returns:
+            Dictionary with all score components
+        """
+        audio_feats = F.normalize(audio_feats, p=2, dim=-1)
+        text_feats = F.normalize(text_feats, p=2, dim=-1)
+        cogr = torch.sum(audio_feats * text_feats, dim=-1)
+
+        result = {"cogr": cogr}
+
+        # If no parsed features, return only COGR
+        if not all(
+            isinstance(x, torch.Tensor)
+            for x in (parsed_audio_feats, parsed_text_feats, parsed_mask)
+        ):
+            result["full"] = cogr
+            return result
+
+        parsed_audio_feats = F.normalize(parsed_audio_feats, p=2, dim=-1)
+        parsed_text_feats = F.normalize(parsed_text_feats, p=2, dim=-1)
+        mask = parsed_mask.to(parsed_audio_feats.device)
+
+        figr_p, figr_r, figr_f = self._greedy_matching(
+            audio_emb=parsed_audio_feats,
+            text_emb=parsed_text_feats,
+            audio_mask=mask,
+            text_mask=mask,
+        )
+
+        result["figr_p"] = figr_p
+        result["figr_r"] = figr_r
+        result["figr_f"] = figr_f
+        result["full"] = (cogr + figr_f) / 2.0
+
+        return result
