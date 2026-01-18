@@ -327,13 +327,13 @@ class TTADataset(Dataset):
         return len(self.database)
 
     def _load_pre_extracted_feats(
-        self, feats_name: str, dataset_name: str, file_name: str
+        self, feats_name: str, dataset_name: str, file_name: str, dim: int = None
     ) -> torch.Tensor:
         """Load pre-extracted features from the specified file path."""
         feats_dir = os.path.join(self.data_dir, "features", feats_name)
         feat_path = os.path.join(feats_dir, dataset_name, file_name)
         if not os.path.exists(feat_path):
-            raise FileNotFoundError(f"Feature file not found: {feat_path}")
+            return torch.empty(0, dim)
         feats = torch.load(feat_path, map_location="cpu")
         return feats.to(self.dtype)
 
@@ -344,11 +344,13 @@ class TTADataset(Dataset):
         feats_dir = os.path.join(self.data_dir, "features", feats_name)
         feat_path = os.path.join(feats_dir, dataset_name, file_name)
         if not os.path.exists(feat_path):
-            raise FileNotFoundError(f"Feature file not found: {feat_path}")
+            return torch.empty(0, dtype=torch.bool)
         return torch.load(feat_path, map_location="cpu")
 
     def _load_features(self, data):
         """Pre-load all features into memory to speed up data loading."""
+        msclap_dim = 1024
+        laionclap_dim = 512
         text_file_name = f"{data['text_id']}.pt"
         audio_file_name = os.path.basename(data["audio_file_path"]).replace(
             ".wav", ".pt"
@@ -382,6 +384,7 @@ class TTADataset(Dataset):
                 feats_name="msclap_parsed_audio",
                 dataset_name=dataset_name,
                 file_name=text_file_name,
+                dim=msclap_dim,
             )
         )
         data["msclap_parsed_text"] = self._pad_or_truncate_feats(
@@ -389,6 +392,7 @@ class TTADataset(Dataset):
                 feats_name="msclap_parsed_text",
                 dataset_name=dataset_name,
                 file_name=text_file_name,
+                dim=msclap_dim,
             )
         )
         data["laionclap_parsed_audio"] = self._pad_or_truncate_feats(
@@ -396,6 +400,7 @@ class TTADataset(Dataset):
                 feats_name="laionclap_parsed_audio",
                 dataset_name=dataset_name,
                 file_name=text_file_name,
+                dim=laionclap_dim,
             )
         )
         data["laionclap_parsed_text"] = self._pad_or_truncate_feats(
@@ -403,6 +408,7 @@ class TTADataset(Dataset):
                 feats_name="laionclap_parsed_text",
                 dataset_name=dataset_name,
                 file_name=text_file_name,
+                dim=laionclap_dim,
             )
         )
         data["parsed_mask"] = self._pad_or_truncate_mask(
@@ -416,6 +422,8 @@ class TTADataset(Dataset):
 
     def _pad_or_truncate_feats(self, feats: torch.Tensor) -> torch.Tensor:
         """Pad or truncate parsed features to a fixed sequence length."""
+        if feats is None:
+            return None
         target_len = self.parsed_seq_size
         cur_len = feats.shape[0]
         if cur_len == target_len:
@@ -430,6 +438,8 @@ class TTADataset(Dataset):
 
     def _pad_or_truncate_mask(self, mask: torch.Tensor) -> torch.Tensor:
         """Pad or truncate parsed mask to a fixed sequence length."""
+        if mask is None:
+            return None
         target_len = self.parsed_seq_size
         cur_len = mask.shape[0]
         if cur_len == target_len:

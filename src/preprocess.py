@@ -746,18 +746,20 @@ def embed_parsed_data(
                 ]
             )
 
+            if len(audio_files) == 0 and len(audio_sources) == 0:
+                print(text_id, dataset)
+                continue
+            if not len(audio_files) == len(audio_sources):
+                raise ValueError(
+                    f"Number of separated audio files ({len(audio_files)}) does not match number of audio sources ({len(audio_sources)}) for {text_id} in {dataset}."
+                )
+
             # Embed audio and text
             audio_embeddings = embedder.embed_audios(audio_files)  # [N, D]
             text_embeddings = embedder.embed_texts(audio_sources)  # [N, D]
 
-            audio_len = audio_embeddings.shape[0]
-            text_len = text_embeddings.shape[0]
-            num_segments = min(audio_len, text_len)
+            num_segments = audio_embeddings.shape[0]
             embed_dim = audio_embeddings.shape[-1]
-
-            if audio_len != text_len:
-                audio_embeddings = audio_embeddings[:num_segments]
-                text_embeddings = text_embeddings[:num_segments]
 
             # Create mask for valid positions
             mask = torch.zeros(seq_size, dtype=torch.bool)
@@ -899,12 +901,12 @@ def main(args):
     # clear_gpu_memory()
     # text_parse(dataloader, args.feats_dir)
     # clear_gpu_memory()
-    audio_parse(dataloader, args.feats_dir)
+    # audio_parse(dataloader, args.feats_dir)
     # clear_gpu_memory()
-    # embed_parsed_data(dataloader, args.feats_dir, embed_model="msclap")
-    # clear_gpu_memory()
-    # embed_parsed_data(dataloader, args.feats_dir, embed_model="laionclap")
-    # create_diff_audio(dataloader, args.feats_dir)
+    embed_parsed_data(dataloader, args.feats_dir, embed_model="msclap")
+    clear_gpu_memory()
+    embed_parsed_data(dataloader, args.feats_dir, embed_model="laionclap")
+    create_diff_audio(dataloader, args.feats_dir)
 
 
 ### argument parser ###
