@@ -178,121 +178,19 @@ Output: ["A large dog barks loudly", "heavy rain falls on the metal roof"]"""
 
 
 class GPTTextParser:
-    def __init__(self, model_name: str = "gpt-5.2"):
+    def __init__(self, model_name: str = "gpt-4o-2024-08-06"):
         self.client = OpenAI()
         self.model_name = model_name
-        self.reasoning = None
+        self.system_prompt = """Identify all sound events in the caption.
 
-    def _build_chat_messages(self, text: str) -> list[dict]:
-        """Build chat messages from text"""
-        system_prompt = "You are a text parser. Output ONLY a JSON array of strings."
-        user_prompt = f"""Task:
-        Identify all sound events described in the following caption.
+Rules:
+- Each element = ONE sound event (concise NP or VP form)
+- No duplicates or semantically overlapping events
+- No emotional/evaluative/subjective modifiers
 
-        Rules:
-        - Each element must correspond to ONE sound event.
-        - Express each sound event in a concise NP or VP form.
-        - Do NOT include duplicate or semantically overlapping sound events.
-        - Do NOT include emotional, evaluative, or subjective modifiers.
-        - If the caption describes only ONE sound event, output a JSON array with a single string.
-        - Output MUST be a valid JSON array of strings.
-
-        Example 1:
-        Caption: Birds chirp loudly in the distance; a person talks nearby; more chirping.
-        Output: ["Birds chirping loudly in the distance", "A person talking nearby"]
-
-        Example 2:
-        A male vocalist sings this spirited song. The song is medium tempo with energetic electric guitar lead enthusiastic electric bass guitar  hard hitting drums and keyboard harmony. The vocals are passionate youthfulenergetic vociferous powerful and loud . This song is Hard Rock/Metal.
-        Output: ["A male vocalist singing", "An electric guitar lead playing", "An electric bass guitar playing", "Drums playing", "A keyboard harmony playing"]
-
-        Caption: {text}
-
-        Output: """
-        return [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ]
-
-    def _normalize_output(self, result_text: str) -> str:
-        """Normalize output text (convert to list format)"""
-        result_text = result_text.strip()
-        # Remove newlines to make single line
-        result_text = " ".join(result_text.split())
-
-        # Extract all quoted strings using regex
-        quoted_strings = re.findall(r'"([^"]*)"', result_text)
-        if quoted_strings:
-            valid_items = []
-            # Only include a-z, A-Z, 0-9, -, ', ., space
-            for s in quoted_strings:
-                cleaned = re.sub(r"[^a-zA-Z0-9\s\-',\.]", "", s)
-                valid_items.append(cleaned)
-            return json.dumps(valid_items)
-
-        # Fallback: try to parse as JSON array
-        start_idx = result_text.find("[")
-        end_idx = result_text.rfind("]")
-        if start_idx != -1 and end_idx != -1:
-            array_str = result_text[start_idx : end_idx + 1]
-            try:
-                items = json.loads(array_str)
-                if isinstance(items, list):
-                    return json.dumps(items)
-            except json.JSONDecodeError:
-                raise ValueError(f"Invalid JSON format: {result_text}")
-
-        # Last resort: wrap entire text
-        # Only include a-z, A-Z, 0-9, -, ', ., space
-        cleaned = re.sub(r"[^a-zA-Z0-9\s\-',\.]", "", result_text)
-        return json.dumps([cleaned])
-
-    def _fix_unquoted_strings(self, result_text: str) -> str:
-        """Wrap unquoted strings with double quotes"""
-        # Remove extra { } ( )
-        for char in "{}()":
-            result_text = result_text.replace(char, "")
-        # Return as-is if already parseable
-        try:
-            json.loads(result_text)
-            return result_text
-        except json.JSONDecodeError:
-            pass
-        # Remove [ and ] to get inner content
-        inner = result_text[1:-1].strip()
-        if not inner:
-            return "[]"
-        # Split by comma and process each element
-        items = []
-        for item in inner.split(","):
-            item = item.strip().strip('"').strip("'")
-            # For "key": "value" format, get only the value part
-            if ":" in item:
-                item = item.split(":")[-1].strip().strip('"').strip("'")
-            if item:
-                items.append(item)
-        quoted_items = [f'"{item}"' for item in items]
-        return "[" + ", ".join(quoted_items) + "]"
-
-    def _parse_json_result(self, result_text: str) -> list:
-        """Parse JSON string and convert to list"""
-        try:
-            result: list = json.loads(result_text)
-            if isinstance(result, list):
-                return result
-            elif isinstance(result, str):
-                return [result]
-            elif isinstance(result, dict):
-                return result["audio_sources"]
-            else:
-                raise ValueError("Unexpected JSON format")
-        except Exception as e:
-            raise RuntimeError(f"{e}: \n{result_text}")
-
-    def _decode_single_response(self, result_text: str) -> list:
-        """Normalize and parse a single response"""
-        result_text = self._normalize_output(result_text)
-        result_text = self._parse_json_result(result_text)
-        return result_text
+Example:
+Caption: Birds chirp loudly in the distance; a person talks nearby; more chirping.
+Output: ["Birds chirping loudly in the distance", "A person talking nearby"]"""
 
     def parse_texts(self, texts: list[str]) -> list[list[str]]:
         responses = []
@@ -300,15 +198,18 @@ class GPTTextParser:
         for idx, text in enumerate(texts, start=1):
             print(f"[gpt-text-parse] {idx}/{total} start")
             start_time = time.perf_counter()
-            response = self.client.responses.create(
+            response = self.client.beta.chat.completions.parse(
                 model=self.model_name,
-                input=self._build_chat_messages(text),
+                messages=[
+                    {"role": "system", "content": self.system_prompt},
+                    {"role": "user", "content": f"Caption: {text}"},
+                ],
+                response_format=SoundEvents,
             )
-            result = self._decode_single_response(response.output_text)
+            result = response.choices[0].message.parsed.events
             elapsed = time.perf_counter() - start_time
             print(f"[gpt-text-parse] {idx}/{total} done ({elapsed:.2f}s)")
             responses.append(result)
-
         return responses
 
 
