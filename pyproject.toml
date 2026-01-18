@@ -26,7 +26,7 @@ torch = [{ index = "pytorch-cu118" }]
 torchaudio = [{ index = "pytorch-cu118" }]
 torchvision = [{ index = "pytorch-cu118" }]
 xformers = [{ index = "pytorch-cu118" }]
-sam-audio = { git = "https://github.com/kento2247/sam-audio.git", rev = "91f99d7d5e90b73dcbbe4ba4f617995c918a3f7e" }
+sam-audio = { path = "src/sam-audio" }
 
 [[tool.uv.index]]
 name     = "pytorch-cu118"

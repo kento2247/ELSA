@@ -149,15 +149,20 @@ class QwenTextParser:
     def _build_chat_template(self, text: str) -> str:
         """Build chat template from text"""
         system_prompt = "Output only a JSON array of strings."
-        user_prompt = f"""Split the caption into separate sound events. Keep all modifiers (adjectives, adverbs, descriptions).
+        user_prompt = f"""Split the caption into a list of distinct sound events.
+Preserve all modifiers (adjectives, adverbs, and descriptive phrases).
+Do NOT include any temporal or sequential information (e.g., order, timing, repetition, before/after).
+Do NOT output duplicate or semantically overlapping sound events.
+If the same sound event appears multiple times, keep only the most informative occurrence.
 
-        Caption: {text}
+Caption:
+{text}
 
-        Example:
-        Caption: A large dog barks loudly while heavy rain falls on the metal roof.
-        Output: ["A large dog barks loudly", "heavy rain falls on the metal roof"]
+Example:
+Caption: Birds chirp loudly in the distance; a person talks nearby; more chirping.
+Output: ["Birds chirp loudly in the distance", "A person talks nearby"]
 
-        Output:"""
+Output: """
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
@@ -266,7 +271,7 @@ class QwenTextParser:
 
 class SamAudio:
     def __init__(
-        self, model_name: str = "facebook/sam-audio-small", dtype=torch.bfloat16
+        self, model_name: str = "facebook/sam-audio-large", dtype=torch.bfloat16
     ):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.dtype = dtype
@@ -280,7 +285,7 @@ class SamAudio:
         self,
         audio_file: str,
         prompts: list[str],
-        predict_spans: bool = False,
+        predict_spans: bool = True,
         reranking_candidates: int = 1,
     ) -> list[torch.Tensor]:
         """
@@ -574,6 +579,7 @@ def audio_parse(dataloader, feats_dir: str):
             )
             with open(text_path, "r") as f:
                 audio_sources = json.load(f)
+            audio_sources = [src.lower() for src in audio_sources]
             save_dir = os.path.join(feats_dir, "separated_audio", dataset, text_id)
             os.makedirs(save_dir, exist_ok=True)
 
@@ -700,7 +706,7 @@ def main(args):
     # laionclap_extract(dataloader, args.feats_dir)
     # clear_gpu_memory()
     # msclap_extract(dataloader, args.feats_dir, seed=args.seed)
-    clear_gpu_memory()
+    # clear_gpu_memory()
     text_parse(dataloader, args.feats_dir)
     clear_gpu_memory()
     audio_parse(dataloader, args.feats_dir)
