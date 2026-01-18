@@ -59,9 +59,9 @@ class TTAEvalModel(nn.Module):
         self,
         audio_feats: torch.Tensor,
         text_feats: torch.Tensor,
-        parsed_audio_feats: torch.Tensor | None = None,
-        parsed_text_feats: torch.Tensor | None = None,
-        parsed_mask: torch.Tensor | None = None,
+        parsed_audio_feats: torch.Tensor,
+        parsed_text_feats: torch.Tensor,
+        parsed_mask: torch.Tensor,
     ) -> torch.Tensor:
         """
         Coarse-Grained (COGR): Global cosine similarity between audio and text embeddings.
@@ -83,12 +83,6 @@ class TTAEvalModel(nn.Module):
         text_feats = F.normalize(text_feats, p=2, dim=-1)
         cogr = torch.sum(audio_feats * text_feats, dim=-1)  # [B]
 
-        if not all(
-            isinstance(x, torch.Tensor)
-            for x in (parsed_audio_feats, parsed_text_feats, parsed_mask)
-        ):
-            return cogr
-
         parsed_audio_feats = F.normalize(parsed_audio_feats, p=2, dim=-1)
         parsed_text_feats = F.normalize(parsed_text_feats, p=2, dim=-1)
 
@@ -101,6 +95,9 @@ class TTAEvalModel(nn.Module):
             text_mask=mask,
         )
 
+        # For samples with all-zero masks, use only cogr
+        has_valid_mask = mask.any(dim=-1)  # [B]
         combined_score = (cogr + figr_f1) / 2.0
+        score = torch.where(has_valid_mask, combined_score, cogr)
 
-        return combined_score
+        return score
