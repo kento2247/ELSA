@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 
 import pandas as pd
-from flask import Flask, render_template_string, send_file, request
+from flask import Flask, render_template_string, request, send_file
 
 # Base paths
 DATA_DIR = Path(__file__).parent.parent / "data"
@@ -19,7 +19,7 @@ FEATURES_DIR = DATA_DIR / "features"
 PARSED_TEXTS_DIR = FEATURES_DIR / "parsed_texts"
 SEPARATED_AUDIO_DIR = FEATURES_DIR / "separated_audio"
 
-DATASETS = ["relate", "audiocap", "musiccap", "xacle"]
+DATASETS = ["relate", "audiocap", "musiccap", "aishell7b"]
 
 app = Flask(__name__)
 
@@ -542,7 +542,9 @@ def load_xacle_metadata() -> dict[str, dict]:
 
     # Train/val data
     for split, split_name in [("train", "train"), ("val", "validation")]:
-        csv_path = DATA_DIR / "XACLE_dataset" / "meta_data" / f"{split_name}_average.csv"
+        csv_path = (
+            DATA_DIR / "XACLE_dataset" / "meta_data" / f"{split_name}_average.csv"
+        )
         if csv_path.exists():
             df = pd.read_csv(csv_path)
             for index, row in df.iterrows():
@@ -559,6 +561,51 @@ def load_xacle_metadata() -> dict[str, dict]:
     return metadata
 
 
+def load_aishell7b_metadata() -> dict[str, dict]:
+    """Load AISHELL-7B dataset metadata, mapping text_id to (text, audio_path)."""
+    metadata = {}
+
+    # Load prompt info (text prompts)
+    prompt_info_path = DATA_DIR / "MusicEval-full" / "prompt_info.txt"
+    if not prompt_info_path.exists():
+        return {}
+    prompt_df = pd.read_csv(prompt_info_path, sep="\t")
+    prompt_dict = dict(zip(prompt_df["id"], prompt_df["text"]))
+
+    # Load each split
+    split_mapping = {"train": "train", "val": "dev", "test": "test"}
+    for split, split_name in split_mapping.items():
+        mos_list_path = DATA_DIR / "MusicEval-full" / "sets" / f"{split_name}_mos_list.txt"
+        if not mos_list_path.exists():
+            continue
+
+        mos_data = pd.read_csv(
+            mos_list_path, header=None, names=["filename", "ovl", "rel"]
+        )
+
+        for index, row in mos_data.iterrows():
+            filename = row["filename"]
+
+            # Extract prompt ID from filename (e.g., audiomos2025-track1-S032_P092.wav -> P092)
+            prompt_id = filename.split("_")[-1].replace(".wav", "")
+            text = prompt_dict.get(prompt_id, "")
+
+            audio_path = DATA_DIR / "MusicEval-full" / "wav" / filename
+
+            # Create entries for both REL and OVL metrics
+            for metric in ["REL", "OVL"]:
+                text_id = f"{split}_{metric}_{index}"
+                metadata[text_id] = {
+                    "text": text,
+                    "audio_path": str(audio_path),
+                    "ovl_score": row["ovl"],
+                    "rel_score": row["rel"],
+                    "prompt_id": prompt_id,
+                }
+
+    return metadata
+
+
 def get_metadata(dataset: str) -> dict[str, dict]:
     """Get metadata for a dataset, with caching."""
     if dataset not in _metadata_cache:
@@ -567,6 +614,7 @@ def get_metadata(dataset: str) -> dict[str, dict]:
             "audiocap": load_audiocap_metadata,
             "musiccap": load_musiccap_metadata,
             "xacle": load_xacle_metadata,
+            "aishell7b": load_aishell7b_metadata,  # Placeholder for future implementation
         }
         _metadata_cache[dataset] = loaders[dataset]()
     return _metadata_cache[dataset]
@@ -583,7 +631,9 @@ def get_available_text_ids(dataset: str) -> list[str]:
         if f.suffix == ".json":
             text_ids.append(f.stem)
 
-    return sorted(text_ids, key=lambda x: (x.split("_")[0], x.split("_")[1], int(x.split("_")[2])))
+    return sorted(
+        text_ids, key=lambda x: (x.split("_")[0], x.split("_")[1], int(x.split("_")[2]))
+    )
 
 
 def load_parsed_text(dataset: str, text_id: str) -> list[str] | None:
