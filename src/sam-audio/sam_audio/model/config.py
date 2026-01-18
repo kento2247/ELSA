@@ -218,7 +218,7 @@ class SAMAudioConfig:
         self.in_channels = in_channels
         self.audio_codec = DACVAEConfig(**(audio_codec or {}))
         self.text_encoder = T5EncoderConfig(**(text_encoder or {}))
-        self.vision_encoder = PerceptionEncoderConfig(**(vision_encoder or {}))
+        # self.vision_encoder = PerceptionEncoderConfig(**(vision_encoder or {}))
         self.transformer = TransformerConfig(**(transformer or {}))
         self.num_anchors = num_anchors
         self.anchor_embedding_dim = anchor_embedding_dim

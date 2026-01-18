@@ -7,8 +7,6 @@ from typing import Any, Dict, Optional
 
 import torch
 from core.audio_visual_encoder import PEAudioFrame, PEAudioFrameTransform
-from torchdiffeq import odeint
-
 from sam_audio.model.align import AlignModalities
 from sam_audio.model.base import BaseModel
 from sam_audio.model.codec import DACVAE
@@ -18,6 +16,7 @@ from sam_audio.model.transformer import DiT
 from sam_audio.model.vision_encoder import PerceptionEncoder
 from sam_audio.processor import Batch
 from sam_audio.ranking import create_ranker
+from torchdiffeq import odeint
 
 DFLT_ODE_OPT = {"method": "midpoint", "options": {"step_size": 2 / 32}}
 
@@ -81,11 +80,11 @@ class SAMAudio(BaseModel):
         self.audio_codec = DACVAE(cfg.audio_codec)
         self.text_encoder = T5TextEncoder(cfg.text_encoder)  # base
         # self.vision_encoder = PerceptionEncoder(cfg.vision_encoder)
-        self.vision_encoder_dim = cfg.vision_encoder.dim  # 1024
+        self.vision_encoder_dim = 1024
         self.transformer = DiT(cfg.transformer)
         self.proj = torch.nn.Linear(cfg.in_channels, cfg.transformer.dim)
         self.align_masked_video = AlignModalities(
-            cfg.vision_encoder.dim, cfg.transformer.dim
+            self.vision_encoder_dim, cfg.transformer.dim
         )
         self.embed_anchors = EmbedAnchors(
             cfg.num_anchors, cfg.anchor_embedding_dim, cfg.transformer.dim
@@ -96,13 +95,13 @@ class SAMAudio(BaseModel):
         self.text_ranker = None  # create_ranker(cfg.text_ranker)
         self.span_predictor = None
         self.span_predictor_transform = None
-        # if cfg.span_predictor is not None:
-        #     self.span_predictor = PEAudioFrame.from_config(
-        #         cfg.span_predictor, pretrained=True
-        #     )
-        #     self.span_predictor_transform = PEAudioFrameTransform.from_config(
-        #         cfg.span_predictor
-        #     )
+        if cfg.span_predictor is not None:
+            self.span_predictor = PEAudioFrame.from_config(
+                cfg.span_predictor, pretrained=True
+            )
+            self.span_predictor_transform = PEAudioFrameTransform.from_config(
+                cfg.span_predictor
+            )
 
     @property
     def sample_rate(self):

@@ -285,7 +285,7 @@ class SamAudio:
         self,
         audio_file: str,
         prompts: list[str],
-        predict_spans: bool = False,
+        predict_spans: bool = True,
         reranking_candidates: int = 1,
     ) -> list[torch.Tensor]:
         """
@@ -579,6 +579,7 @@ def audio_parse(dataloader, feats_dir: str):
             )
             with open(text_path, "r") as f:
                 audio_sources = json.load(f)
+            audio_sources = [src.lower() for src in audio_sources]
             save_dir = os.path.join(feats_dir, "separated_audio", dataset, text_id)
             os.makedirs(save_dir, exist_ok=True)
 
