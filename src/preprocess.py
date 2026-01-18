@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import time
 from typing import List
 
@@ -613,8 +614,11 @@ def laionclap_extract(dataloader, feats_dir: str):
 
 
 def text_parse(dataloader, feats_dir: str):
-    text_parser = GeminiTextParser()
+    # text_parser = GeminiTextParser()
+    text_parser = GPTTextParser()
     # text_parser = QwenTextParser()
+
+    parsed_text_dict = {}
     for batch in tqdm(dataloader, desc="Parsing Text with Gemini"):
         texts = batch["text"]
         text_ids = batch["text_id"]
@@ -632,17 +636,36 @@ def text_parse(dataloader, feats_dir: str):
         if all_exist:
             continue
 
-        # Parse texts using Gemini
-        audio_sources: list[list[str]] = text_parser.parse_texts(texts)
+        # Prevent duplicate parsing
+        target_texts = []
+        copy_list = []
+        for text, text_id, dataset in zip(texts, text_ids, datasets):
+            if text in parsed_text_dict:
+                src_path = parsed_text_dict[text]
+                dst_path = os.path.join(
+                    feats_dir, "parsed_texts", dataset, f"{text_id}.json"
+                )
+                copy_list.append((src_path, dst_path))
+            else:
+                parsed_text_dict[text] = os.path.join(
+                    feats_dir, "parsed_texts", dataset, f"{text_id}.json"
+                )
+                target_texts.append(text)
 
-        for text_id, dataset, sources in zip(text_ids, datasets, audio_sources):
-            save_path = os.path.join(
-                feats_dir, "parsed_texts", dataset, f"{text_id}.json"
-            )
-            sources = list(set(sources))  # remove duplicates
+        # Parse texts using Gemini
+        audio_sources: list[list[str]] = text_parser.parse_texts(target_texts)
+
+        # Save parsed texts
+        for target_text, audio_source in zip(target_texts, audio_sources):
+            save_path = parsed_text_dict[target_text]
+            audio_source = list(set(audio_source))  # remove duplicates
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
             with open(save_path, "w") as f:
-                json.dump(sources, f, ensure_ascii=False, indent=0)
+                json.dump(audio_source, f, ensure_ascii=False, indent=0)
+
+        # Copy already parsed texts
+        for src_path, dst_path in copy_list:
+            shutil.copyfile(src_path, dst_path)
 
 
 def audio_parse(dataloader, feats_dir: str):
