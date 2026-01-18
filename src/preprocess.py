@@ -701,6 +701,7 @@ def audio_parse(dataloader, feats_dir: str):
                 save_path = os.path.join(save_dir, f"{i}.wav")
                 sam_audio.save_audio(save_path, audio_tensor)
 
+
 def embed_parsed_data(
     dataloader,
     feats_dir: str,
@@ -807,6 +808,74 @@ def embed_parsed_data(
             )
 
 
+def create_diff_audio(dataloader, feats_dir: str):
+    """Parse audio using SAM-Audio based on parsed text sources"""
+    for batch in tqdm(dataloader, desc="Parsing Audio with SAM-Audio"):
+        audio_files = batch["audio_file_path"]
+        text_ids = batch["text_id"]
+        datasets = batch["dataset"]
+
+        for text_id, dataset, audio_file in zip(text_ids, datasets, audio_files):
+            separated_audio_dir = os.path.join(
+                feats_dir, "separated_audio", dataset, text_id
+            )
+
+            # Skip if separated audio directory doesn't exist
+            if not os.path.exists(separated_audio_dir):
+                continue
+
+            separated_audio_files = sorted(
+                [
+                    os.path.join(separated_audio_dir, f)
+                    for f in os.listdir(separated_audio_dir)
+                    if f.endswith(".wav")
+                ]
+            )
+
+            # Skip if no separated audio files exist
+            if len(separated_audio_files) == 0:
+                continue
+
+            # separated_audiosに含まれない音だけを抽出する
+            # 各時刻で最大振幅を持つseparated_audioの値を取り、それをoriginal_audioから引く
+            original_audio, orig_sr = torchaudio.load(audio_file)
+            separated_audios = []
+            for sep_audio_file in separated_audio_files:
+                audio, sep_sr = torchaudio.load(sep_audio_file)
+                separated_audios.append(audio)
+            separated_audios = torch.stack(separated_audios, dim=0)  # (N, C, T)
+
+            # Resample original audio to match separated audio sample rate
+            if orig_sr != sep_sr:
+                resampler = torchaudio.transforms.Resample(orig_sr, sep_sr)
+                original_audio = resampler(original_audio)
+
+            # Match lengths (truncate or pad to shorter length)
+            orig_len = original_audio.shape[-1]
+            sep_len = separated_audios.shape[-1]
+            min_len = min(orig_len, sep_len)
+            original_audio = original_audio[..., :min_len]
+            separated_audios = separated_audios[..., :min_len]
+
+            # 各時刻で最大絶対値を持つseparated_audioの値を使用（波形のset）
+            # これにより、同じ音が複数回抽出されても逆位相にならない
+            abs_separated = torch.abs(separated_audios)  # (N, C, T)
+            max_abs_idx = abs_separated.argmax(dim=0)  # (C, T)
+            # gatherを使って各時刻で最大絶対値を持つ波形の実際の値を取得
+            merged_separated = torch.gather(
+                separated_audios, 0, max_abs_idx.unsqueeze(0)
+            ).squeeze(0)  # (C, T)
+
+            diff_audio = original_audio - merged_separated
+            diff_audio = torch.clamp(diff_audio, -1.0, 1.0)
+
+            # save diff audio
+            diff_audio_dir = os.path.join(feats_dir, "diff_audio", dataset)
+            os.makedirs(diff_audio_dir, exist_ok=True)
+            diff_audio_path = os.path.join(diff_audio_dir, f"{text_id}.wav")
+            torchaudio.save(diff_audio_path, diff_audio, sep_sr)
+
+
 def clear_gpu_memory():
     """Clear GPU memory cache"""
     import gc
@@ -825,13 +894,14 @@ def main(args):
     # clear_gpu_memory()
     # msclap_extract(dataloader, args.feats_dir, seed=args.seed)
     # clear_gpu_memory()
-    text_parse(dataloader, args.feats_dir)
-    clear_gpu_memory()
+    # text_parse(dataloader, args.feats_dir)
+    # clear_gpu_memory()
     # audio_parse(dataloader, args.feats_dir)
     # clear_gpu_memory()
     # embed_parsed_data(dataloader, args.feats_dir, embed_model="msclap")
     # clear_gpu_memory()
     # embed_parsed_data(dataloader, args.feats_dir, embed_model="laionclap")
+    create_diff_audio(dataloader, args.feats_dir)
 
 
 ### argument parser ###

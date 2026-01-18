@@ -18,6 +18,7 @@ DATA_DIR = Path(__file__).parent.parent / "data"
 FEATURES_DIR = DATA_DIR / "features"
 PARSED_TEXTS_DIR = FEATURES_DIR / "parsed_texts"
 SEPARATED_AUDIO_DIR = FEATURES_DIR / "separated_audio"
+DIFF_AUDIO_DIR = FEATURES_DIR / "diff_audio"
 
 DATASETS = ["relate", "audiocap", "musiccap", "aishell7b"]
 
@@ -285,6 +286,22 @@ HTML_TEMPLATE = """
                     <div class="warning">No separated audio files found</div>
                     {% endif %}
                 </div>
+
+                <div class="card" style="margin-top: 20px;">
+                    <h2>Diff Audio (Original - Separated)</h2>
+                    {% if diff_audio_exists %}
+                    <audio id="diff-audio" controls class="audio-player">
+                        <source src="/audio/diff/{{ current_dataset }}/{{ current_text_id }}" type="audio/wav">
+                        Your browser does not support the audio element.
+                    </audio>
+                    <div class="waveform-container" id="diff-waveform-container">
+                        <canvas class="waveform-canvas" id="diff-waveform"></canvas>
+                        <div class="waveform-progress" id="diff-progress"></div>
+                    </div>
+                    {% else %}
+                    <div class="warning">Diff audio not found</div>
+                    {% endif %}
+                </div>
             </div>
         </div>
     </div>
@@ -432,6 +449,17 @@ HTML_TEMPLATE = """
                     'segment-waveform-container-' + i
                 );
                 i++;
+            }
+
+            // Diff audio waveform
+            const diffAudio = document.getElementById('diff-audio');
+            if (diffAudio) {
+                new WaveformVisualizer(
+                    diffAudio,
+                    'diff-waveform',
+                    'diff-progress',
+                    'diff-waveform-container'
+                );
             }
         });
     </script>
@@ -701,6 +729,10 @@ def index():
     audio_path = item_meta.get("audio_path", "")
     audio_exists = audio_path and os.path.exists(audio_path)
 
+    # Check if diff audio exists
+    diff_audio_path = DIFF_AUDIO_DIR / dataset / f"{current_text_id}.wav"
+    diff_audio_exists = diff_audio_path.exists()
+
     # Prepare separated audio data
     separated_audio = []
     if separated_files:
@@ -725,6 +757,7 @@ def index():
         audio_exists=audio_exists,
         audio_path=audio_path,
         separated_audio=separated_audio,
+        diff_audio_exists=diff_audio_exists,
     )
 
 
@@ -745,6 +778,16 @@ def serve_separated_audio(dataset: str, text_id: str, segment_index: int):
     """Serve separated audio segment."""
     audio_dir = SEPARATED_AUDIO_DIR / dataset / text_id
     audio_file = audio_dir / f"{segment_index}.wav"
+
+    if audio_file.exists():
+        return send_file(str(audio_file), mimetype="audio/wav")
+    return "Audio not found", 404
+
+
+@app.route("/audio/diff/<dataset>/<text_id>")
+def serve_diff_audio(dataset: str, text_id: str):
+    """Serve diff audio file."""
+    audio_file = DIFF_AUDIO_DIR / dataset / f"{text_id}.wav"
 
     if audio_file.exists():
         return send_file(str(audio_file), mimetype="audio/wav")
