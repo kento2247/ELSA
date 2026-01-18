@@ -170,6 +170,7 @@ Output: ["A large dog barks loudly", "heavy rain falls on the metal roof"]"""
                     "response_mime_type": "application/json",
                     "response_json_schema": SoundEvents.model_json_schema(),
                 },
+                temperature=0.0,
             )
             sound_events = SoundEvents.model_validate_json(response.text)
             responses.append(sound_events.events)
@@ -220,6 +221,7 @@ class GPTTextParser:
                     {"role": "user", "content": self.build_prompt(text)},
                 ],
                 response_format=SoundEvents,
+                temperature=0.0,
             )
             result = response.choices[0].message.parsed.events
             responses.append(result)
@@ -393,7 +395,7 @@ class SamAudio:
         """
         separated_audios = []
         for prompt in prompts:
-            with torch.no_grad():
+            with torch.inference_mode():
                 batch = self.processor(
                     audios=[audio_file],
                     descriptions=[prompt],
@@ -699,7 +701,6 @@ def audio_parse(dataloader, feats_dir: str):
                 save_path = os.path.join(save_dir, f"{i}.wav")
                 sam_audio.save_audio(save_path, audio_tensor)
 
-
 def embed_parsed_data(
     dataloader,
     feats_dir: str,
@@ -853,7 +854,7 @@ def arg_parser():
     parser.add_argument(
         "--bs",
         type=int,
-        default=1,
+        default=8,
         help="Batch size for DataLoader",
     )
     parser.add_argument(
