@@ -180,26 +180,44 @@ class GPTTextParser:
     def __init__(self, model_name: str = "gpt-4o-2024-08-06"):
         self.client = OpenAI()
         self.model_name = model_name
-        self.system_prompt = """Identify all sound events in the caption.
+        self.system_prompt = (
+            "You are a text parser. Output ONLY a JSON array of strings."
+        )
 
-Rules:
-- Each element = ONE sound event (concise NP or VP form)
-- No duplicates or semantically overlapping events
-- No emotional/evaluative/subjective modifiers
+    def build_prompt(self, text: str) -> str:
+        """Build prompt from text"""
+        prompt = f"""Task:
+        Identify all sound events described in the following caption.
 
-Example:
-Caption: Birds chirp loudly in the distance; a person talks nearby; more chirping.
-Output: ["Birds chirping loudly in the distance", "A person talking nearby"]"""
+        Rules:
+        - Each element must correspond to ONE sound event.
+        - Express each sound event in a concise NP or VP form.
+        - Do NOT include duplicate or semantically overlapping sound events.
+        - Do NOT include emotional, evaluative, or subjective modifiers.
+        - If the caption describes only ONE sound event, output a JSON array with a single string.
+        - Output MUST be a valid JSON array of strings.
+
+        Example 1:
+        Caption: Birds chirp loudly in the distance; a person talks nearby; more chirping.
+        Output: ["Birds chirping loudly in the distance", "A person talking nearby"]
+
+        Example 2:
+        A male vocalist sings this spirited song. The song is medium tempo with energetic electric guitar lead enthusiastic electric bass guitar  hard hitting drums and keyboard harmony. The vocals are passionate youthfulenergetic vociferous powerful and loud . This song is Hard Rock/Metal.
+        Output: ["A male vocalist singing", "An electric guitar lead playing", "An electric bass guitar playing", "Drums playing", "A keyboard harmony playing"]
+
+        Caption: {text}
+
+        Output: """
+        return prompt
 
     def parse_texts(self, texts: list[str]) -> list[list[str]]:
         responses = []
-        total = len(texts)
-        for idx, text in enumerate(texts, start=1):
+        for text in texts:
             response = self.client.beta.chat.completions.parse(
                 model=self.model_name,
                 messages=[
                     {"role": "system", "content": self.system_prompt},
-                    {"role": "user", "content": f"Caption: {text}"},
+                    {"role": "user", "content": self.build_prompt(text)},
                 ],
                 response_format=SoundEvents,
             )
