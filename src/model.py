@@ -11,49 +11,53 @@ class TTAEvalModel(nn.Module):
         super().__init__()
         self.embedding_dim = embedding_dim
 
-    def _greedy_matching(
+    def _kl_from_gaussian(
         self,
         audio_emb: torch.Tensor,
         text_emb: torch.Tensor,
-        audio_mask: torch.Tensor,
-        text_mask: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        mask: torch.Tensor,
+    ) -> torch.Tensor:
         """
+        類似度行列とガウスノイズ間のKLダイバージェンスを計算
+
+        類似度行列をsoftmaxで確率分布に変換し、均一分布（ガウスノイズの期待値）との
+        KLダイバージェンスを計算。スコアが高いほど類似度行列が構造を持つ。
+
         Args:
-            audio_emb: Audio segment embeddings [B, S_a, D]
-            text_emb: Text phrase embeddings [B, S_t, D]
-            audio_mask: Valid audio segment mask [B, S_a]
-            text_mask: Valid text phrase mask [B, S_t]
+            audio_emb: Audio segment embeddings [B, S, D]
+            text_emb: Text phrase embeddings [B, S, D]
+            mask: Valid segment mask [B, S]
 
         Returns:
-            (Precision, Recall, F1) (3, B)
+            score: KLダイバージェンス [B]
         """
+        # 類似度行列 [B, S, S]
         sim = torch.bmm(text_emb, audio_emb.transpose(1, 2))
 
-        mask = torch.bmm(
-            text_mask.unsqueeze(2).float(), audio_mask.unsqueeze(1).float()
-        )
-        mask = mask.to(sim.device)
-        sim = sim * mask
+        # マスク作成 [B, S, S]
+        mask_float = mask.float().to(sim.device)
+        sim_mask = mask_float.unsqueeze(2) * mask_float.unsqueeze(1)
 
-        word_precision = sim.max(dim=2)[0]  # [B, S_t]
+        # マスク外を-infにして softmax から除外
+        sim_masked = sim.masked_fill(sim_mask == 0, float("-inf"))
 
-        word_recall = sim.max(dim=1)[0]  # [B, S_a]
+        # 各行を確率分布に変換 [B, S, S]
+        p = F.softmax(sim_masked, dim=-1)
+        p = p.masked_fill(sim_mask == 0, 0)  # NaN防止
 
-        # precision
-        text_mask_float = text_mask.float().to(word_precision.device)
-        text_valid_counts = text_mask_float.sum(dim=1).clamp(min=1.0)
-        precision = (word_precision * text_mask_float).sum(dim=1) / text_valid_counts
+        # 均一分布 q (ガウスノイズの期待値)
+        valid_per_row = mask_float.sum(dim=1, keepdim=True).clamp(min=1.0)  # [B, 1]
+        q = mask_float.unsqueeze(1) / valid_per_row.unsqueeze(2)  # [B, S, S]
 
-        # recall
-        audio_mask_float = audio_mask.float().to(word_recall.device)
-        audio_valid_counts = audio_mask_float.sum(dim=1).clamp(min=1.0)
-        recall = (word_recall * audio_mask_float).sum(dim=1) / audio_valid_counts
+        # KLダイバージェンス: sum(p * log(p / q))
+        kl = p * (torch.log(p + 1e-10) - torch.log(q + 1e-10))
+        kl = kl.masked_fill(sim_mask == 0, 0)
 
-        # F1
-        f1 = 2 * precision * recall / (precision + recall + 1e-8)
+        # 各バッチの平均KL
+        valid_counts = mask_float.sum(dim=1).clamp(min=1.0)
+        score = kl.sum(dim=(1, 2)) / valid_counts
 
-        return precision, recall, f1
+        return score
 
     def forward(
         self,
@@ -65,9 +69,9 @@ class TTAEvalModel(nn.Module):
     ) -> torch.Tensor:
         """
         Coarse-Grained (COGR): Global cosine similarity between audio and text embeddings.
-        Fine-Grained (FIGR): Greedy matching F1 score between parsed segments.
+        Fine-Grained (FIGR): KL divergence from Gaussian noise.
 
-        Final score = (COGR + FIGR_F1) / 2
+        Final score = (COGR + FIGR) / 2
 
         Args:
             audio_feats: [B, D]
@@ -94,13 +98,12 @@ class TTAEvalModel(nn.Module):
 
         mask = parsed_mask.to(parsed_audio_feats.device)
 
-        _, _, figr_f1 = self._greedy_matching(
+        figr = self._kl_from_gaussian(
             audio_emb=parsed_audio_feats,
             text_emb=parsed_text_feats,
-            audio_mask=mask,
-            text_mask=mask,
+            mask=mask,
         )
 
-        combined_score = (cogr + figr_f1) / 2.0
+        combined_score = (cogr + figr) / 2.0
 
         return combined_score
