@@ -19,6 +19,7 @@ dependencies = [
     "torchcodec==0.5",
     "xformers",
     "soundfile>=0.13.1",
+    "google-genai>=1.57.0",
 ]
 
 [tool.uv.sources]
