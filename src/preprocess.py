@@ -644,8 +644,14 @@ def embed_parsed_data(
             audio_embeddings = embedder.embed_audios(audio_files)  # [N, D]
             text_embeddings = embedder.embed_texts(audio_sources)  # [N, D]
 
-            num_segments = len(audio_files)
+            audio_len = audio_embeddings.shape[0]
+            text_len = text_embeddings.shape[0]
+            num_segments = min(audio_len, text_len)
             embed_dim = audio_embeddings.shape[-1]
+
+            if audio_len != text_len:
+                audio_embeddings = audio_embeddings[:num_segments]
+                text_embeddings = text_embeddings[:num_segments]
 
             # Create mask for valid positions
             mask = torch.zeros(seq_size, dtype=torch.bool)
@@ -655,12 +661,20 @@ def embed_parsed_data(
             # Pad or truncate to seq_size
             if num_segments < seq_size:
                 pad_size = seq_size - num_segments
-                audio_embeddings = torch.cat(
-                    [audio_embeddings, torch.zeros(pad_size, embed_dim)], dim=0
+                audio_pad = torch.zeros(
+                    pad_size,
+                    embed_dim,
+                    device=audio_embeddings.device,
+                    dtype=audio_embeddings.dtype,
                 )
-                text_embeddings = torch.cat(
-                    [text_embeddings, torch.zeros(pad_size, embed_dim)], dim=0
+                text_pad = torch.zeros(
+                    pad_size,
+                    embed_dim,
+                    device=text_embeddings.device,
+                    dtype=text_embeddings.dtype,
                 )
+                audio_embeddings = torch.cat([audio_embeddings, audio_pad], dim=0)
+                text_embeddings = torch.cat([text_embeddings, text_pad], dim=0)
             else:
                 audio_embeddings = audio_embeddings[:seq_size]
                 text_embeddings = text_embeddings[:seq_size]
@@ -701,15 +715,19 @@ def main(args):
     dataset = TTAPreprocessDataset(data_dir=args.data_dir, split=args.split)
     dataloader = DataLoader(dataset, batch_size=args.bs, shuffle=False)
 
-    # humanclap_extract(dataloader, args.feats_dir)
-    # clear_gpu_memory()
-    # laionclap_extract(dataloader, args.feats_dir)
-    # clear_gpu_memory()
-    # msclap_extract(dataloader, args.feats_dir, seed=args.seed)
-    # clear_gpu_memory()
+    humanclap_extract(dataloader, args.feats_dir)
+    clear_gpu_memory()
+    laionclap_extract(dataloader, args.feats_dir)
+    clear_gpu_memory()
+    msclap_extract(dataloader, args.feats_dir, seed=args.seed)
+    clear_gpu_memory()
     text_parse(dataloader, args.feats_dir)
     clear_gpu_memory()
     audio_parse(dataloader, args.feats_dir)
+    clear_gpu_memory()
+    embed_parsed_data(dataloader, args.feats_dir, embed_model="msclap")
+    clear_gpu_memory()
+    embed_parsed_data(dataloader, args.feats_dir, embed_model="laionclap")
 
 
 ### argument parser ###

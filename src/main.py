@@ -72,6 +72,11 @@ class TTAEval:
             wandb.init(project="TTAEval")
             self.meta_data["wandb_url"] = wandb.run.url
 
+    def _maybe_to_device(self, value):
+        if isinstance(value, torch.Tensor):
+            return value.to(self.device)
+        return None
+
     def train(self):
         """Train the model with periodic evaluation on val and test sets."""
         train_dataset = TTADataset(data_dir=self.data_dir, split="train")
@@ -142,14 +147,22 @@ class TTAEval:
         for batch in tqdm(train_loader, desc=f"Training Epoch {epoch}"):
             laionclap_audio = batch["laionclap_audio"].to(self.device)
             laionclap_text = batch["laionclap_text"].to(self.device)
+            laionclap_parsed_audio = self._maybe_to_device(
+                batch.get("laionclap_parsed_audio")
+            )
+            laionclap_parsed_text = self._maybe_to_device(
+                batch.get("laionclap_parsed_text")
+            )
+            parsed_mask = self._maybe_to_device(batch.get("parsed_mask"))
             scores = batch["score"].float().to(self.device)
-            metric_ids = batch["subjective_metric_id"].to(self.device)  # [B]
-
             self.optimizer.zero_grad()
-            preds = self.model(laionclap_audio, laionclap_text, metric_ids).squeeze(
-                -1
-            )  # [B]
-
+            preds = self.model(
+                laionclap_audio,
+                laionclap_text,
+                laionclap_parsed_audio,
+                laionclap_parsed_text,
+                parsed_mask,
+            ).squeeze(-1)
             loss = self.criterion(preds, scores)
             loss.backward()
             self.optimizer.step()
@@ -168,16 +181,30 @@ class TTAEval:
 
         with torch.no_grad():
             for batch in tqdm(data_loader, desc=desc):
-                audio_file_path = batch["audio_file_path"]
                 laionclap_audio = batch["laionclap_audio"].to(self.device)
                 laionclap_text = batch["laionclap_text"].to(self.device)
+                laionclap_parsed_audio = self._maybe_to_device(
+                    batch.get("laionclap_parsed_audio")
+                )
+                laionclap_parsed_text = self._maybe_to_device(
+                    batch.get("laionclap_parsed_text")
+                )
+                parsed_mask = self._maybe_to_device(batch.get("parsed_mask"))
                 scores = batch["score"].numpy()
-                metric_ids = batch["subjective_metric_id"].to(self.device)  # [B]
+                audio_file_path = batch["audio_file_path"]
 
-                preds = self.model(
-                    laionclap_audio, laionclap_text, metric_ids
-                )  # [B, 1]
-                preds = preds.squeeze(-1).cpu().numpy()  # [B]
+                preds = (
+                    self.model(
+                        laionclap_audio,
+                        laionclap_text,
+                        laionclap_parsed_audio,
+                        laionclap_parsed_text,
+                        parsed_mask,
+                    )
+                    .squeeze(-1)
+                    .cpu()
+                    .numpy()
+                )
 
                 all_preds.append(preds)
                 all_scores.append(scores)
@@ -370,7 +397,8 @@ if __name__ == "__main__":
     )
 
     if args.mode == "train":
-        evaluator.train()
+        raise NotImplementedError("Training mode is currently disabled.")
     elif args.mode == "test":
-        evaluator.load_model("best_model.pt")
-        evaluator.test(save_qualitative=args.save_qualitative)
+        test_metrics = evaluator.test()
+        lb_text = format_leaderboard_text(evaluator.meta_data, test_metrics)
+        print(f"Leaderboard Text:\n{lb_text}")
