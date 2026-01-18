@@ -618,54 +618,41 @@ def text_parse(dataloader, feats_dir: str):
     text_parser = GPTTextParser()
     # text_parser = QwenTextParser()
 
-    parsed_text_dict = {}
-    for batch in tqdm(dataloader, desc="Parsing Text with Gemini"):
+    cache: dict[str, list[str]] = {}  # text -> parsed events
+
+    for batch in tqdm(dataloader, desc="Parsing Text"):
         texts = batch["text"]
         text_ids = batch["text_id"]
         datasets = batch["dataset"]
 
-        # Check if all files in batch already exist
-        all_exist = True
-        for text_id, dataset in zip(text_ids, datasets):
+        # Collect texts that need parsing (not in cache and file doesn't exist)
+        to_parse = []
+        for text, text_id, dataset in zip(texts, text_ids, datasets):
             save_path = os.path.join(
                 feats_dir, "parsed_texts", dataset, f"{text_id}.json"
             )
-            if not os.path.exists(save_path):
-                all_exist = False
-                break
-        if all_exist:
-            continue
+            if os.path.exists(save_path) or text in cache:
+                continue
+            if text not in [t for t, _, _ in to_parse]:
+                to_parse.append((text, text_id, dataset))
 
-        # Prevent duplicate parsing
-        target_texts = []
-        copy_list = []
+        # Parse unique texts
+        if to_parse:
+            unique_texts = [t for t, _, _ in to_parse]
+            results = text_parser.parse_texts(unique_texts)
+            for text, result in zip(unique_texts, results):
+                cache[text] = list(set(result))
+
+        # Save all texts in batch
         for text, text_id, dataset in zip(texts, text_ids, datasets):
-            if text in parsed_text_dict:
-                src_path = parsed_text_dict[text]
-                dst_path = os.path.join(
-                    feats_dir, "parsed_texts", dataset, f"{text_id}.json"
-                )
-                copy_list.append((src_path, dst_path))
-            else:
-                parsed_text_dict[text] = os.path.join(
-                    feats_dir, "parsed_texts", dataset, f"{text_id}.json"
-                )
-                target_texts.append(text)
-
-        # Parse texts using Gemini
-        audio_sources: list[list[str]] = text_parser.parse_texts(target_texts)
-
-        # Save parsed texts
-        for target_text, audio_source in zip(target_texts, audio_sources):
-            save_path = parsed_text_dict[target_text]
-            audio_source = list(set(audio_source))  # remove duplicates
+            save_path = os.path.join(
+                feats_dir, "parsed_texts", dataset, f"{text_id}.json"
+            )
+            if os.path.exists(save_path):
+                continue
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
             with open(save_path, "w") as f:
-                json.dump(audio_source, f, ensure_ascii=False, indent=0)
-
-        # Copy already parsed texts
-        for src_path, dst_path in copy_list:
-            shutil.copyfile(src_path, dst_path)
+                json.dump(cache[text], f, ensure_ascii=False, indent=0)
 
 
 def audio_parse(dataloader, feats_dir: str):
