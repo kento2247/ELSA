@@ -582,7 +582,7 @@ def audio_parse(dataloader, feats_dir: str):
             save_dir = os.path.join(feats_dir, "separated_audio", dataset, text_id)
             os.makedirs(save_dir, exist_ok=True)
 
-            if os.listdir(save_dir) == len(audio_sources):
+            if len(os.listdir(save_dir)) == len(audio_sources):
                 continue
 
             # Split audio using SAM-Audio
