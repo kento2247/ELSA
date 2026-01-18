@@ -10,7 +10,7 @@ from msclap import CLAP
 from sam_audio import SAMAudio, SAMAudioProcessor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, ClapModel, ClapProcessor
 
 from dataset import TTADataset
 from utils.helper_func import fix_seed
@@ -81,6 +81,55 @@ class LaionClapEmbedder:
             audio_embeddings = self.model.get_audio_embedding_from_filelist(
                 x=audio_files, use_tensor=True
             )
+        return audio_embeddings.to(self.dtype)
+
+
+class HumanCLAPEmbedder:
+    def __init__(self, dtype: torch.dtype = torch.float32):
+        model_path = "sarulab-speech/human-clap-wsce-mae"
+        processor_path = "laion/clap-htsat-fused"
+        self.model = ClapModel.from_pretrained(model_path).to(0)
+        self.model.eval()
+        self.processor = ClapProcessor.from_pretrained(processor_path)
+        self.dtype = dtype
+        self.target_sr = 48000
+        self.resampler_16k = torchaudio.transforms.Resample(16000, self.target_sr)
+
+    def _load_audio(self, audio_path: str) -> list:
+        """Load audio file and resample to 48kHz if needed"""
+        audio, sr = torchaudio.load(audio_path)
+        audio = audio[0]  # mono
+        if sr == 16000:
+            audio = self.resampler_16k(audio)
+        elif sr != self.target_sr:
+            resampler = torchaudio.transforms.Resample(sr, self.target_sr)
+            audio = resampler(audio)
+        return audio.detach().numpy().copy()
+
+    def embed_texts(self, texts: list[str]) -> torch.Tensor:
+        """Embed texts in batch (truncate long texts)"""
+        with torch.no_grad():
+            inputs = self.processor(
+                text=texts,
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+                max_length=77,
+            ).to(0)
+            text_embeddings = self.model.get_text_features(**inputs)
+        return text_embeddings.to(self.dtype)
+
+    def embed_audios(self, audio_files: list[str]) -> torch.Tensor:
+        """Embed audios in batch"""
+        audios = [self._load_audio(f) for f in audio_files]
+        with torch.no_grad():
+            inputs = self.processor(
+                audios=audios,
+                return_tensors="pt",
+                sampling_rate=self.target_sr,
+                padding=True,
+            ).to(0)
+            audio_embeddings = self.model.get_audio_features(**inputs)
         return audio_embeddings.to(self.dtype)
 
 
@@ -230,26 +279,26 @@ class SamAudio:
     def separate_audio(
         self,
         audio_file: str,
-        descriptions: list[str],
+        prompts: list[str],
         predict_spans: bool = False,
         reranking_candidates: int = 1,
-    ) -> dict[str, torch.Tensor]:
+    ) -> list[torch.Tensor]:
         """
-        Separate audio based on text descriptions.
+        Separate audio based on text prompts.
         Args:
             audio_file: Path to audio file.
-            descriptions: List of text descriptions for separation.
+            prompts: List of text prompts for separation.
             predict_spans: Whether to predict spans (better quality but slower).
             reranking_candidates: Number of reranking candidates.
         Returns:
-            Dict mapping description to separated audio tensor.
+            List of separated audio tensors.
         """
-        separated_audios = {}
-        for description in descriptions:
+        separated_audios = []
+        for prompt in prompts:
             with torch.no_grad():
                 batch = self.processor(
                     audios=[audio_file],
-                    descriptions=[description],
+                    descriptions=[prompt],
                 ).to(self.device)
                 # Only convert audio tensors to dtype, keep index tensors as int64
                 batch.audios = batch.audios.to(self.dtype)
@@ -259,7 +308,7 @@ class SamAudio:
                     reranking_candidates=reranking_candidates,
                 )
 
-            separated_audios[description] = result.target[0]
+            separated_audios.append(result.target[0])
         return separated_audios
 
     def save_audio(
@@ -388,6 +437,51 @@ def msclap_extract(dataloader, feats_dir: str, seed: int = 42):
         )
 
 
+def humanclap_extract(dataloader, feats_dir: str):
+    human_clap_embedder = HumanCLAPEmbedder()
+    for batch in tqdm(dataloader, desc="Extracting HumanCLAP features"):
+        audio_files = batch["audio_file_path"]
+        texts = batch["text"]
+        text_ids = batch["text_id"]
+        datasets = batch["dataset"]
+
+        audio_file_names = [
+            os.path.basename(path).replace(".wav", ".pt") for path in audio_files
+        ]
+        text_file_names = [f"{text_id}.pt" for text_id in text_ids]
+
+        if check_all_file_exists(
+            datasets,
+            audio_files,
+            feats_dir,
+            "humanclap_audio",
+        ) and check_all_file_exists(
+            datasets,
+            text_file_names,
+            feats_dir,
+            "humanclap_text",
+        ):
+            continue
+
+        human_audio_embeddings = human_clap_embedder.embed_audios(audio_files)
+        human_text_embeddings = human_clap_embedder.embed_texts(texts)
+
+        save_batch_feats(
+            feats_dir,
+            datasets,
+            "humanclap_audio",
+            audio_file_names,
+            human_audio_embeddings,
+        )
+        save_batch_feats(
+            feats_dir,
+            datasets,
+            "humanclap_text",
+            text_file_names,
+            human_text_embeddings,
+        )
+
+
 def laionclap_extract(dataloader, feats_dir: str):
     laion_clap_embedder = LaionClapEmbedder()
     for batch in tqdm(dataloader, desc="Extracting LaionCLAP features"):
@@ -459,36 +553,40 @@ def text_parse(dataloader, feats_dir: str):
             save_path = os.path.join(
                 feats_dir, "parsed_texts", dataset, f"{text_id}.json"
             )
+            sources = list(set(sources))  # remove duplicates
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
             with open(save_path, "w") as f:
                 json.dump(sources, f, ensure_ascii=False, indent=0)
 
 
-def music_parse(dataloader, feats_dir: str):
-    """Parse music audio using SAM-Audio based on splited text"""
+def audio_parse(dataloader, feats_dir: str):
+    """Parse audio using SAM-Audio based on parsed text sources"""
     sam_audio = SamAudio()
-    for batch in tqdm(dataloader, desc="Parsing Music with SAM-Audio"):
+    for batch in tqdm(dataloader, desc="Parsing Audio with SAM-Audio"):
         audio_files = batch["audio_file_path"]
         text_ids = batch["text_id"]
         datasets = batch["dataset"]
 
         for text_id, dataset, audio_file in zip(text_ids, datasets, audio_files):
-            # Load parsed text prompts
+            # Load parsed audio sources
             text_path = os.path.join(
                 feats_dir, "parsed_texts", dataset, f"{text_id}.json"
             )
             with open(text_path, "r") as f:
-                text_prompts = json.load(f)
+                audio_sources = json.load(f)
+            save_dir = os.path.join(feats_dir, "separated_audio", dataset, text_id)
+            os.makedirs(save_dir, exist_ok=True)
+
+            if os.listdir(save_dir) == len(audio_sources):
+                continue
 
             # Split audio using SAM-Audio
-            separated_audios: dict[str, torch.Tensor] = sam_audio.separate_audio(
-                audio_file, text_prompts
+            separated_audios: list[torch.Tensor] = sam_audio.separate_audio(
+                audio_file, audio_sources
             )
 
             # Save separated audio files
-            for i, (description, audio_tensor) in enumerate(separated_audios.items()):
-                save_dir = os.path.join(feats_dir, "separated_audio", dataset, text_id)
-                os.makedirs(save_dir, exist_ok=True)
+            for i, audio_tensor in enumerate(separated_audios):
                 save_path = os.path.join(save_dir, f"{i}.wav")
                 sam_audio.save_audio(save_path, audio_tensor)
 
@@ -519,14 +617,12 @@ def embed_parsed_data(
         datasets = batch["dataset"]
 
         for text_id, dataset in zip(text_ids, datasets):
-            if dataset == "aishell7b":
-                continue
-            # Load parsed text prompts
+            # Load parsed audio sources
             text_path = os.path.join(
                 feats_dir, "parsed_texts", dataset, f"{text_id}.json"
             )
             with open(text_path, "r") as f:
-                text_prompts: list[str] = json.load(f)
+                audio_sources: list[str] = json.load(f)
 
             # Load separated audio files
             audio_dir = os.path.join(feats_dir, "separated_audio", dataset, text_id)
@@ -540,7 +636,7 @@ def embed_parsed_data(
 
             # Embed audio and text
             audio_embeddings = embedder.embed_audios(audio_files)  # [N, D]
-            text_embeddings = embedder.embed_texts(text_prompts)  # [N, D]
+            text_embeddings = embedder.embed_texts(audio_sources)  # [N, D]
 
             audio_len = audio_embeddings.shape[0]
             text_len = text_embeddings.shape[0]

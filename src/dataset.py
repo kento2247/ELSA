@@ -19,12 +19,11 @@ class TTADataset(Dataset):
             "relate",
             "audiocap",
             "musiccap",
-            "xacle",
             "aishell7b",
         ],
         split: Literal["train", "val", "test"] = "train",
         bitrate: int = 16000,
-        max_len: int = 160000 * 10,
+        max_len: int = 16000 * 10,
         dtype: torch.dtype = torch.float32,
         pre_load_features: bool = False,
         parsed_seq_size: int = 20,
@@ -106,6 +105,7 @@ class TTADataset(Dataset):
                     "ref_audio_file_path": ref_audio_file_path,
                     "text": text,
                     "score": score,
+                    "subjective_metric_id": 0 if subjective_metric == "REL" else 1,
                 }
             )
 
@@ -147,6 +147,7 @@ class TTADataset(Dataset):
                     ),
                     "text": text,
                     "score": score,
+                    "subjective_metric_id": 0 if subjective_metric == "REL" else 1,
                 }
             )
 
@@ -184,10 +185,11 @@ class TTADataset(Dataset):
                         self.data_dir, "human_eval", "music", model, f"{file_name}.wav"
                     ),
                     "ref_audio_file_path": os.path.join(
-                        self.data_dir, "human_eval", "audio", "real", f"{file_name}.wav"
+                        self.data_dir, "human_eval", "music", "real", f"{file_name}.wav"
                     ),
                     "text": text,
                     "score": score,
+                    "subjective_metric_id": 0 if subjective_metric == "REL" else 1,
                 }
             )
 
@@ -240,6 +242,7 @@ class TTADataset(Dataset):
                     "ref_audio_file_path": ref_audio_file_path,
                     "text": text,
                     "score": score,
+                    "subjective_metric_id": 0 if subjective_metric == "REL" else 1,
                 }
             )
 
@@ -299,6 +302,7 @@ class TTADataset(Dataset):
                     "ref_audio_file_path": ref_audio_file_path,
                     "text": text,
                     "score": score,
+                    "subjective_metric_id": 0 if subjective_metric == "REL" else 1,
                 }
             )
 
