@@ -7,16 +7,15 @@ from typing import Any, Dict, Optional
 
 import torch
 from core.audio_visual_encoder import PEAudioFrame, PEAudioFrameTransform
+from torchdiffeq import odeint
+
 from sam_audio.model.align import AlignModalities
 from sam_audio.model.base import BaseModel
 from sam_audio.model.codec import DACVAE
 from sam_audio.model.config import SAMAudioConfig
 from sam_audio.model.text_encoder import T5TextEncoder
 from sam_audio.model.transformer import DiT
-from sam_audio.model.vision_encoder import PerceptionEncoder
 from sam_audio.processor import Batch
-from sam_audio.ranking import create_ranker
-from torchdiffeq import odeint
 
 DFLT_ODE_OPT = {"method": "midpoint", "options": {"step_size": 2 / 32}}
 
