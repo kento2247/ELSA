@@ -259,7 +259,9 @@ class TTADataset(Dataset):
         mos_list_path = os.path.join(
             self.data_dir, "MusicEval-full", "sets", f"{split_name}_mos_list.txt"
         )
-        mos_data = pd.read_csv(mos_list_path, header=None, names=["filename", "ovl", "rel"])
+        mos_data = pd.read_csv(
+            mos_list_path, header=None, names=["filename", "ovl", "rel"]
+        )
 
         for index, row in tqdm(
             mos_data.iterrows(),
@@ -370,51 +372,42 @@ class TTADataset(Dataset):
             dataset_name=dataset_name,
             file_name=text_file_name,
         )
-        if dataset_name == "aishell7b":
-            data["msclap_parsed_audio"] = []
-            data["msclap_parsed_text"] = []
-            data["laionclap_parsed_audio"] = []
-            data["laionclap_parsed_text"] = []
-            data["parsed_mask"] = []
-            return data
-        data["msclap_parsed_audio"] = self._load_pre_extracted_feats(
-            feats_name="msclap_parsed_audio",
-            dataset_name=dataset_name,
-            file_name=text_file_name,
-        )
-        data["msclap_parsed_text"] = self._load_pre_extracted_feats(
-            feats_name="msclap_parsed_text",
-            dataset_name=dataset_name,
-            file_name=text_file_name,
-        )
-        data["laionclap_parsed_audio"] = self._load_pre_extracted_feats(
-            feats_name="laionclap_parsed_audio",
-            dataset_name=dataset_name,
-            file_name=text_file_name,
-        )
-        data["laionclap_parsed_text"] = self._load_pre_extracted_feats(
-            feats_name="laionclap_parsed_text",
-            dataset_name=dataset_name,
-            file_name=text_file_name,
-        )
-        data["parsed_mask"] = self._load_pre_extracted_mask(
-            feats_name="parsed_mask",
-            dataset_name=dataset_name,
-            file_name=text_file_name,
-        )
+
         data["msclap_parsed_audio"] = self._pad_or_truncate_feats(
-            data["msclap_parsed_audio"]
+            self._load_pre_extracted_feats(
+                feats_name="msclap_parsed_audio",
+                dataset_name=dataset_name,
+                file_name=text_file_name,
+            )
         )
         data["msclap_parsed_text"] = self._pad_or_truncate_feats(
-            data["msclap_parsed_text"]
+            self._load_pre_extracted_feats(
+                feats_name="msclap_parsed_text",
+                dataset_name=dataset_name,
+                file_name=text_file_name,
+            )
         )
         data["laionclap_parsed_audio"] = self._pad_or_truncate_feats(
-            data["laionclap_parsed_audio"]
+            self._load_pre_extracted_feats(
+                feats_name="laionclap_parsed_audio",
+                dataset_name=dataset_name,
+                file_name=text_file_name,
+            )
         )
         data["laionclap_parsed_text"] = self._pad_or_truncate_feats(
-            data["laionclap_parsed_text"]
+            self._load_pre_extracted_feats(
+                feats_name="laionclap_parsed_text",
+                dataset_name=dataset_name,
+                file_name=text_file_name,
+            )
         )
-        data["parsed_mask"] = self._pad_or_truncate_mask(data["parsed_mask"])
+        data["parsed_mask"] = self._pad_or_truncate_mask(
+            self._load_pre_extracted_mask(
+                feats_name="parsed_mask",
+                dataset_name=dataset_name,
+                file_name=text_file_name,
+            )
+        )
         return data
 
     def _pad_or_truncate_feats(self, feats: torch.Tensor) -> torch.Tensor:
