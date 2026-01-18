@@ -14,8 +14,7 @@ from pydantic import BaseModel, Field
 from sam_audio import SAMAudio, SAMAudioProcessor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from transformers import (AutoModelForCausalLM, AutoTokenizer, ClapModel,
-                          ClapProcessor)
+from transformers import AutoModelForCausalLM, AutoTokenizer, ClapModel, ClapProcessor
 
 from dataset import TTADataset
 from utils.helper_func import fix_seed
@@ -692,10 +691,11 @@ def audio_parse(dataloader, feats_dir: str):
             if len(os.listdir(save_dir)) == len(audio_sources):
                 continue
 
-            # Split audio using SAM-Audio
-            separated_audios: list[torch.Tensor] = sam_audio.separate_audio(
-                audio_file, audio_sources
-            )
+            # Split audio using SAM-Audio with automatic mixed precision
+            with torch.amp.autocast("cuda"):
+                separated_audios: list[torch.Tensor] = sam_audio.separate_audio(
+                    audio_file, audio_sources
+                )
 
             # Save separated audio files
             for i, audio_tensor in enumerate(separated_audios):
