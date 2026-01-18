@@ -14,7 +14,8 @@ from pydantic import BaseModel, Field
 from sam_audio import SAMAudio, SAMAudioProcessor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from transformers import AutoModelForCausalLM, AutoTokenizer, ClapModel, ClapProcessor
+from transformers import (AutoModelForCausalLM, AutoTokenizer, ClapModel,
+                          ClapProcessor)
 
 from dataset import TTADataset
 from utils.helper_func import fix_seed
@@ -366,7 +367,7 @@ Output: """
 
 class SamAudio:
     def __init__(
-        self, model_name: str = "facebook/sam-audio-large", dtype=torch.bfloat16
+        self, model_name: str = "facebook/sam-audio-large-tv", dtype=torch.bfloat16
     ):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.dtype = dtype
@@ -381,7 +382,7 @@ class SamAudio:
         audio_file: str,
         prompts: list[str],
         predict_spans: bool = True,
-        reranking_candidates: int = 1,
+        reranking_candidates: int = 5,
     ) -> list[torch.Tensor]:
         """
         Separate audio based on text prompts.
@@ -864,7 +865,9 @@ def create_diff_audio(dataloader, feats_dir: str):
             # gatherを使って各時刻で最大絶対値を持つ波形の実際の値を取得
             merged_separated = torch.gather(
                 separated_audios, 0, max_abs_idx.unsqueeze(0)
-            ).squeeze(0)  # (C, T)
+            ).squeeze(
+                0
+            )  # (C, T)
 
             diff_audio = original_audio - merged_separated
             diff_audio = torch.clamp(diff_audio, -1.0, 1.0)
@@ -896,12 +899,12 @@ def main(args):
     # clear_gpu_memory()
     # text_parse(dataloader, args.feats_dir)
     # clear_gpu_memory()
-    # audio_parse(dataloader, args.feats_dir)
+    audio_parse(dataloader, args.feats_dir)
     # clear_gpu_memory()
     # embed_parsed_data(dataloader, args.feats_dir, embed_model="msclap")
     # clear_gpu_memory()
     # embed_parsed_data(dataloader, args.feats_dir, embed_model="laionclap")
-    create_diff_audio(dataloader, args.feats_dir)
+    # create_diff_audio(dataloader, args.feats_dir)
 
 
 ### argument parser ###
