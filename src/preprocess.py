@@ -2,8 +2,6 @@ import argparse
 import json
 import os
 import re
-import shutil
-import time
 from typing import List
 
 import laion_clap
@@ -197,8 +195,6 @@ Output: ["Birds chirping loudly in the distance", "A person talking nearby"]"""
         responses = []
         total = len(texts)
         for idx, text in enumerate(texts, start=1):
-            print(f"[gpt-text-parse] {idx}/{total} start")
-            start_time = time.perf_counter()
             response = self.client.beta.chat.completions.parse(
                 model=self.model_name,
                 messages=[
@@ -208,8 +204,6 @@ Output: ["Birds chirping loudly in the distance", "A person talking nearby"]"""
                 response_format=SoundEvents,
             )
             result = response.choices[0].message.parsed.events
-            elapsed = time.perf_counter() - start_time
-            print(f"[gpt-text-parse] {idx}/{total} done ({elapsed:.2f}s)")
             responses.append(result)
         return responses
 
@@ -806,19 +800,19 @@ def main(args):
     dataset = TTAPreprocessDataset(data_dir=args.data_dir, split=args.split)
     dataloader = DataLoader(dataset, batch_size=args.bs, shuffle=False)
 
-    humanclap_extract(dataloader, args.feats_dir)
-    clear_gpu_memory()
-    laionclap_extract(dataloader, args.feats_dir)
-    clear_gpu_memory()
-    msclap_extract(dataloader, args.feats_dir, seed=args.seed)
-    clear_gpu_memory()
+    # humanclap_extract(dataloader, args.feats_dir)
+    # clear_gpu_memory()
+    # laionclap_extract(dataloader, args.feats_dir)
+    # clear_gpu_memory()
+    # msclap_extract(dataloader, args.feats_dir, seed=args.seed)
+    # clear_gpu_memory()
     text_parse(dataloader, args.feats_dir)
     clear_gpu_memory()
-    audio_parse(dataloader, args.feats_dir)
-    clear_gpu_memory()
-    embed_parsed_data(dataloader, args.feats_dir, embed_model="msclap")
-    clear_gpu_memory()
-    embed_parsed_data(dataloader, args.feats_dir, embed_model="laionclap")
+    # audio_parse(dataloader, args.feats_dir)
+    # clear_gpu_memory()
+    # embed_parsed_data(dataloader, args.feats_dir, embed_model="msclap")
+    # clear_gpu_memory()
+    # embed_parsed_data(dataloader, args.feats_dir, embed_model="laionclap")
 
 
 ### argument parser ###
@@ -857,7 +851,7 @@ def arg_parser():
 if __name__ == "__main__":
     args = arg_parser()
     fix_seed(args.seed)
-    splits = ["train", "val", "test"]
+    splits = ["test"]
     for split in splits:
         args.split = split
         main(args)
