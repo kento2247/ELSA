@@ -155,8 +155,6 @@ class TTAEval:
             )
             parsed_mask = self._maybe_to_device(batch.get("parsed_mask"))
             scores = batch["score"].float().to(self.device)
-            metric_ids = batch["subjective_metric_id"].to(self.device)  # [B]
-
             self.optimizer.zero_grad()
             preds = self.model(
                 laionclap_audio,
@@ -183,25 +181,24 @@ class TTAEval:
 
         with torch.no_grad():
             for batch in tqdm(data_loader, desc=desc):
-                msclap_audio = batch["msclap_audio"].to(self.device)
-                msclap_text = batch["msclap_text"].to(self.device)
-                msclap_parsed_audio = self._maybe_to_device(
-                    batch.get("msclap_parsed_audio")
+                laionclap_audio = batch["laionclap_audio"].to(self.device)
+                laionclap_text = batch["laionclap_text"].to(self.device)
+                laionclap_parsed_audio = self._maybe_to_device(
+                    batch.get("laionclap_parsed_audio")
                 )
-                msclap_parsed_text = self._maybe_to_device(
-                    batch.get("msclap_parsed_text")
+                laionclap_parsed_text = self._maybe_to_device(
+                    batch.get("laionclap_parsed_text")
                 )
                 parsed_mask = self._maybe_to_device(batch.get("parsed_mask"))
                 scores = batch["score"].numpy()
-                metric_ids = batch["subjective_metric_id"].to(self.device)  # [B]
                 audio_file_path = batch["audio_file_path"]
 
                 preds = (
                     self.model(
-                        msclap_audio,
-                        msclap_text,
-                        msclap_parsed_audio,
-                        msclap_parsed_text,
+                        laionclap_audio,
+                        laionclap_text,
+                        laionclap_parsed_audio,
+                        laionclap_parsed_text,
                         parsed_mask,
                     )
                     .squeeze(-1)
