@@ -123,6 +123,28 @@ HTML_TEMPLATE = """
             width: 100%;
             margin-top: 10px;
         }
+        .waveform-container {
+            position: relative;
+            width: 100%;
+            height: 80px;
+            background: #1a1a2e;
+            border-radius: 4px;
+            margin-top: 10px;
+            cursor: pointer;
+        }
+        .waveform-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        .waveform-progress {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            background: rgba(0, 123, 255, 0.3);
+            pointer-events: none;
+        }
         .segment {
             background: #f8f9fa;
             padding: 15px;
@@ -230,10 +252,14 @@ HTML_TEMPLATE = """
                 <div class="card">
                     <h2>Original Audio</h2>
                     {% if audio_exists %}
-                    <audio controls class="audio-player">
+                    <audio id="original-audio" controls class="audio-player">
                         <source src="/audio/original/{{ current_dataset }}/{{ current_text_id }}" type="audio/wav">
                         Your browser does not support the audio element.
                     </audio>
+                    <div class="waveform-container" id="original-waveform-container">
+                        <canvas class="waveform-canvas" id="original-waveform"></canvas>
+                        <div class="waveform-progress" id="original-progress"></div>
+                    </div>
                     {% else %}
                     <div class="warning">Audio file not found: {{ audio_path }}</div>
                     {% endif %}
@@ -245,10 +271,14 @@ HTML_TEMPLATE = """
                     {% for i, segment in separated_audio %}
                     <div class="segment">
                         <div class="segment-label">{{ i + 1 }}. {{ segment.label }}</div>
-                        <audio controls class="audio-player">
+                        <audio id="segment-audio-{{ i }}" controls class="audio-player">
                             <source src="/audio/separated/{{ current_dataset }}/{{ current_text_id }}/{{ i }}" type="audio/wav">
                             Your browser does not support the audio element.
                         </audio>
+                        <div class="waveform-container" id="segment-waveform-container-{{ i }}">
+                            <canvas class="waveform-canvas" id="segment-waveform-{{ i }}"></canvas>
+                            <div class="waveform-progress" id="segment-progress-{{ i }}"></div>
+                        </div>
                     </div>
                     {% endfor %}
                     {% else %}
@@ -272,6 +302,138 @@ HTML_TEMPLATE = """
                 window.location.href = '/?dataset=' + dataset + '&search=' + encodeURIComponent(search);
             }
         }
+
+        // Waveform visualization
+        class WaveformVisualizer {
+            constructor(audioElement, canvasId, progressId, containerId) {
+                this.audio = audioElement;
+                this.canvas = document.getElementById(canvasId);
+                this.progress = document.getElementById(progressId);
+                this.container = document.getElementById(containerId);
+                this.audioContext = null;
+                this.audioBuffer = null;
+
+                if (this.canvas && this.audio) {
+                    this.init();
+                }
+            }
+
+            async init() {
+                this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                await this.loadAudio();
+                this.setupEvents();
+            }
+
+            async loadAudio() {
+                try {
+                    const response = await fetch(this.audio.querySelector('source').src);
+                    const arrayBuffer = await response.arrayBuffer();
+                    this.audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+                    this.drawWaveform();
+                } catch (error) {
+                    console.error('Error loading audio:', error);
+                }
+            }
+
+            drawWaveform() {
+                const ctx = this.canvas.getContext('2d');
+                const dpr = window.devicePixelRatio || 1;
+                const rect = this.canvas.getBoundingClientRect();
+
+                this.canvas.width = rect.width * dpr;
+                this.canvas.height = rect.height * dpr;
+                ctx.scale(dpr, dpr);
+
+                const width = rect.width;
+                const height = rect.height;
+                const data = this.audioBuffer.getChannelData(0);
+                const step = Math.ceil(data.length / width);
+                const amp = height / 2;
+
+                ctx.fillStyle = '#1a1a2e';
+                ctx.fillRect(0, 0, width, height);
+
+                ctx.beginPath();
+                ctx.moveTo(0, amp);
+
+                for (let i = 0; i < width; i++) {
+                    let min = 1.0;
+                    let max = -1.0;
+                    for (let j = 0; j < step; j++) {
+                        const datum = data[(i * step) + j];
+                        if (datum < min) min = datum;
+                        if (datum > max) max = datum;
+                    }
+                    ctx.lineTo(i, (1 + min) * amp);
+                    ctx.lineTo(i, (1 + max) * amp);
+                }
+
+                ctx.strokeStyle = '#4dabf7';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                // Center line
+                ctx.beginPath();
+                ctx.moveTo(0, amp);
+                ctx.lineTo(width, amp);
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
+
+            setupEvents() {
+                // Update progress bar during playback
+                this.audio.addEventListener('timeupdate', () => {
+                    const percent = (this.audio.currentTime / this.audio.duration) * 100;
+                    this.progress.style.width = percent + '%';
+                });
+
+                // Click to seek
+                this.container.addEventListener('click', (e) => {
+                    const rect = this.container.getBoundingClientRect();
+                    const percent = (e.clientX - rect.left) / rect.width;
+                    this.audio.currentTime = percent * this.audio.duration;
+                    if (this.audio.paused) {
+                        this.audio.play();
+                    }
+                });
+
+                // Handle window resize
+                window.addEventListener('resize', () => {
+                    if (this.audioBuffer) {
+                        this.drawWaveform();
+                    }
+                });
+            }
+        }
+
+        // Initialize waveforms after page load
+        document.addEventListener('DOMContentLoaded', () => {
+            // Original audio waveform
+            const originalAudio = document.getElementById('original-audio');
+            if (originalAudio) {
+                new WaveformVisualizer(
+                    originalAudio,
+                    'original-waveform',
+                    'original-progress',
+                    'original-waveform-container'
+                );
+            }
+
+            // Separated audio waveforms
+            let i = 0;
+            while (true) {
+                const segmentAudio = document.getElementById('segment-audio-' + i);
+                if (!segmentAudio) break;
+                new WaveformVisualizer(
+                    segmentAudio,
+                    'segment-waveform-' + i,
+                    'segment-progress-' + i,
+                    'segment-waveform-container-' + i
+                );
+                i++;
+            }
+        });
     </script>
 </body>
 </html>
