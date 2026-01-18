@@ -357,7 +357,18 @@ class TTADataset(Dataset):
         )
         dataset_name = data["dataset"]
 
-        # data["audio"] = self._load_wav(data["audio_file_path"])
+        data["audio"] = self._load_wav(data["audio_file_path"])
+        residual_audio_path = os.path.join(
+            self.data_dir,
+            "features",
+            "residual_audio",
+            dataset_name,
+            f"{data['text_id']}.wav",
+        )
+        if not os.path.exists(residual_audio_path):
+            data["residual_audio"] = data["audio"]
+        else:
+            data["residual_audio"] = self._load_wav(residual_audio_path)
         data["msclap_audio"] = self._load_pre_extracted_feats(
             feats_name="msclap_audio",
             dataset_name=dataset_name,

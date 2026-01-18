@@ -811,7 +811,7 @@ def embed_parsed_data(
             )
 
 
-def create_diff_audio(dataloader, feats_dir: str):
+def create_residual_audio(dataloader, feats_dir: str):
     """Parse audio using SAM-Audio based on parsed text sources"""
     for batch in tqdm(dataloader, desc="Parsing Audio with SAM-Audio"):
         audio_files = batch["audio_file_path"]
@@ -871,14 +871,14 @@ def create_diff_audio(dataloader, feats_dir: str):
                 0
             )  # (C, T)
 
-            diff_audio = original_audio - merged_separated
-            diff_audio = torch.clamp(diff_audio, -1.0, 1.0)
+            residual_audio = original_audio - merged_separated
+            residual_audio = torch.clamp(residual_audio, -1.0, 1.0)
 
             # save diff audio
-            diff_audio_dir = os.path.join(feats_dir, "diff_audio", dataset)
-            os.makedirs(diff_audio_dir, exist_ok=True)
-            diff_audio_path = os.path.join(diff_audio_dir, f"{text_id}.wav")
-            torchaudio.save(diff_audio_path, diff_audio, sep_sr)
+            residual_audio_dir = os.path.join(feats_dir, "residual_audio", dataset)
+            os.makedirs(residual_audio_dir, exist_ok=True)
+            residual_audio_path = os.path.join(residual_audio_dir, f"{text_id}.wav")
+            torchaudio.save(residual_audio_path, residual_audio, sep_sr)
 
 
 def clear_gpu_memory():
@@ -906,7 +906,7 @@ def main(args):
     embed_parsed_data(dataloader, args.feats_dir, embed_model="msclap")
     clear_gpu_memory()
     embed_parsed_data(dataloader, args.feats_dir, embed_model="laionclap")
-    create_diff_audio(dataloader, args.feats_dir)
+    create_residual_audio(dataloader, args.feats_dir)
 
 
 ### argument parser ###

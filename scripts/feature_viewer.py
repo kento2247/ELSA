@@ -18,7 +18,7 @@ DATA_DIR = Path(__file__).parent.parent / "data"
 FEATURES_DIR = DATA_DIR / "features"
 PARSED_TEXTS_DIR = FEATURES_DIR / "parsed_texts"
 SEPARATED_AUDIO_DIR = FEATURES_DIR / "separated_audio"
-DIFF_AUDIO_DIR = FEATURES_DIR / "diff_audio"
+residual_audio_DIR = FEATURES_DIR / "residual_audio"
 
 DATASETS = ["relate", "audiocap", "musiccap", "aishell7b"]
 
@@ -289,7 +289,7 @@ HTML_TEMPLATE = """
 
                 <div class="card" style="margin-top: 20px;">
                     <h2>Diff Audio (Original - Separated)</h2>
-                    {% if diff_audio_exists %}
+                    {% if residual_audio_exists %}
                     <audio id="diff-audio" controls class="audio-player">
                         <source src="/audio/diff/{{ current_dataset }}/{{ current_text_id }}" type="audio/wav">
                         Your browser does not support the audio element.
@@ -603,7 +603,9 @@ def load_aishell7b_metadata() -> dict[str, dict]:
     # Load each split
     split_mapping = {"train": "train", "val": "dev", "test": "test"}
     for split, split_name in split_mapping.items():
-        mos_list_path = DATA_DIR / "MusicEval-full" / "sets" / f"{split_name}_mos_list.txt"
+        mos_list_path = (
+            DATA_DIR / "MusicEval-full" / "sets" / f"{split_name}_mos_list.txt"
+        )
         if not mos_list_path.exists():
             continue
 
@@ -730,8 +732,8 @@ def index():
     audio_exists = audio_path and os.path.exists(audio_path)
 
     # Check if diff audio exists
-    diff_audio_path = DIFF_AUDIO_DIR / dataset / f"{current_text_id}.wav"
-    diff_audio_exists = diff_audio_path.exists()
+    residual_audio_path = residual_audio_DIR / dataset / f"{current_text_id}.wav"
+    residual_audio_exists = residual_audio_path.exists()
 
     # Prepare separated audio data
     separated_audio = []
@@ -757,7 +759,7 @@ def index():
         audio_exists=audio_exists,
         audio_path=audio_path,
         separated_audio=separated_audio,
-        diff_audio_exists=diff_audio_exists,
+        residual_audio_exists=residual_audio_exists,
     )
 
 
@@ -785,9 +787,9 @@ def serve_separated_audio(dataset: str, text_id: str, segment_index: int):
 
 
 @app.route("/audio/diff/<dataset>/<text_id>")
-def serve_diff_audio(dataset: str, text_id: str):
+def serve_residual_audio(dataset: str, text_id: str):
     """Serve diff audio file."""
-    audio_file = DIFF_AUDIO_DIR / dataset / f"{text_id}.wav"
+    audio_file = residual_audio_DIR / dataset / f"{text_id}.wav"
 
     if audio_file.exists():
         return send_file(str(audio_file), mimetype="audio/wav")

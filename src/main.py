@@ -154,6 +154,9 @@ class TTAEval:
                 batch.get("laionclap_parsed_text")
             )
             parsed_mask = self._maybe_to_device(batch.get("parsed_mask"))
+            audio = batch["audio"].to(self.device)
+            residual_audio = batch["residual_audio"].to(self.device)
+            subjective_metric_id = batch["subjective_metric_id"].to(self.device)
             scores = batch["score"].float().to(self.device)
             self.optimizer.zero_grad()
             preds = self.model(
@@ -162,6 +165,9 @@ class TTAEval:
                 laionclap_parsed_audio,
                 laionclap_parsed_text,
                 parsed_mask,
+                audio=audio,
+                residual_audio=residual_audio,
+                subjective_metric_id=subjective_metric_id,
             ).squeeze(-1)
             loss = self.criterion(preds, scores)
             loss.backward()
@@ -172,7 +178,11 @@ class TTAEval:
 
         return total_loss / num_batches
 
-    def evaluate(self, data_loader: DataLoader, desc: str = "Evaluating") -> dict:
+    def evaluate(
+        self,
+        data_loader: DataLoader,
+        desc: str = "Evaluating",
+    ) -> dict:
         """Evaluate the model and return metrics dict."""
         self.model.eval()
         all_preds: list[np.ndarray] = []
@@ -190,6 +200,9 @@ class TTAEval:
                     batch.get("laionclap_parsed_text")
                 )
                 parsed_mask = self._maybe_to_device(batch.get("parsed_mask"))
+                audio = batch["audio"].to(self.device)
+                residual_audio = batch["residual_audio"].to(self.device)
+                subjective_metric_id = batch["subjective_metric_id"].to(self.device)
                 scores = batch["score"].numpy()
                 audio_file_path = batch["audio_file_path"]
 
@@ -200,6 +213,9 @@ class TTAEval:
                         laionclap_parsed_audio,
                         laionclap_parsed_text,
                         parsed_mask,
+                        audio=audio,
+                        residual_audio=residual_audio,
+                        subjective_metric_id=subjective_metric_id,
                     )
                     .squeeze(-1)
                     .cpu()
