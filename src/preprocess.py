@@ -170,6 +170,7 @@ Output: ["A large dog barks loudly", "heavy rain falls on the metal roof"]"""
                     "response_mime_type": "application/json",
                     "response_json_schema": SoundEvents.model_json_schema(),
                 },
+                temperature=0.0,
             )
             sound_events = SoundEvents.model_validate_json(response.text)
             responses.append(sound_events.events)
@@ -220,6 +221,7 @@ class GPTTextParser:
                     {"role": "user", "content": self.build_prompt(text)},
                 ],
                 response_format=SoundEvents,
+                temperature=0.0,
             )
             result = response.choices[0].message.parsed.events
             responses.append(result)
@@ -364,7 +366,7 @@ Output: """
 
 class SamAudio:
     def __init__(
-        self, model_name: str = "facebook/sam-audio-large", dtype=torch.bfloat16
+        self, model_name: str = "facebook/sam-audio-large-tv", dtype=torch.bfloat16
     ):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.dtype = dtype
@@ -379,7 +381,7 @@ class SamAudio:
         audio_file: str,
         prompts: list[str],
         predict_spans: bool = True,
-        reranking_candidates: int = 1,
+        reranking_candidates: int = 5,
     ) -> list[torch.Tensor]:
         """
         Separate audio based on text prompts.
@@ -393,7 +395,7 @@ class SamAudio:
         """
         separated_audios = []
         for prompt in prompts:
-            with torch.no_grad():
+            with torch.inference_mode():
                 batch = self.processor(
                     audios=[audio_file],
                     descriptions=[prompt],
@@ -689,10 +691,11 @@ def audio_parse(dataloader, feats_dir: str):
             if len(os.listdir(save_dir)) == len(audio_sources):
                 continue
 
-            # Split audio using SAM-Audio
-            separated_audios: list[torch.Tensor] = sam_audio.separate_audio(
-                audio_file, audio_sources
-            )
+            # Split audio using SAM-Audio with automatic mixed precision
+            with torch.amp.autocast("cuda"):
+                separated_audios: list[torch.Tensor] = sam_audio.separate_audio(
+                    audio_file, audio_sources
+                )
 
             # Save separated audio files
             for i, audio_tensor in enumerate(separated_audios):
@@ -743,18 +746,20 @@ def embed_parsed_data(
                 ]
             )
 
+            if len(audio_files) == 0 and len(audio_sources) == 0:
+                print(text_id, dataset)
+                continue
+            if not len(audio_files) == len(audio_sources):
+                raise ValueError(
+                    f"Number of separated audio files ({len(audio_files)}) does not match number of audio sources ({len(audio_sources)}) for {text_id} in {dataset}."
+                )
+
             # Embed audio and text
             audio_embeddings = embedder.embed_audios(audio_files)  # [N, D]
             text_embeddings = embedder.embed_texts(audio_sources)  # [N, D]
 
-            audio_len = audio_embeddings.shape[0]
-            text_len = text_embeddings.shape[0]
-            num_segments = min(audio_len, text_len)
+            num_segments = audio_embeddings.shape[0]
             embed_dim = audio_embeddings.shape[-1]
-
-            if audio_len != text_len:
-                audio_embeddings = audio_embeddings[:num_segments]
-                text_embeddings = text_embeddings[:num_segments]
 
             # Create mask for valid positions
             mask = torch.zeros(seq_size, dtype=torch.bool)
@@ -806,6 +811,76 @@ def embed_parsed_data(
             )
 
 
+def create_diff_audio(dataloader, feats_dir: str):
+    """Parse audio using SAM-Audio based on parsed text sources"""
+    for batch in tqdm(dataloader, desc="Parsing Audio with SAM-Audio"):
+        audio_files = batch["audio_file_path"]
+        text_ids = batch["text_id"]
+        datasets = batch["dataset"]
+
+        for text_id, dataset, audio_file in zip(text_ids, datasets, audio_files):
+            separated_audio_dir = os.path.join(
+                feats_dir, "separated_audio", dataset, text_id
+            )
+
+            # Skip if separated audio directory doesn't exist
+            if not os.path.exists(separated_audio_dir):
+                continue
+
+            separated_audio_files = sorted(
+                [
+                    os.path.join(separated_audio_dir, f)
+                    for f in os.listdir(separated_audio_dir)
+                    if f.endswith(".wav")
+                ]
+            )
+
+            # Skip if no separated audio files exist
+            if len(separated_audio_files) == 0:
+                continue
+
+            # separated_audiosに含まれない音だけを抽出する
+            # 各時刻で最大振幅を持つseparated_audioの値を取り、それをoriginal_audioから引く
+            original_audio, orig_sr = torchaudio.load(audio_file)
+            separated_audios = []
+            for sep_audio_file in separated_audio_files:
+                audio, sep_sr = torchaudio.load(sep_audio_file)
+                separated_audios.append(audio)
+            separated_audios = torch.stack(separated_audios, dim=0)  # (N, C, T)
+
+            # Resample original audio to match separated audio sample rate
+            if orig_sr != sep_sr:
+                resampler = torchaudio.transforms.Resample(orig_sr, sep_sr)
+                original_audio = resampler(original_audio)
+
+            # Match lengths (truncate or pad to shorter length)
+            orig_len = original_audio.shape[-1]
+            sep_len = separated_audios.shape[-1]
+            min_len = min(orig_len, sep_len)
+            original_audio = original_audio[..., :min_len]
+            separated_audios = separated_audios[..., :min_len]
+
+            # 各時刻で最大絶対値を持つseparated_audioの値を使用（波形のset）
+            # これにより、同じ音が複数回抽出されても逆位相にならない
+            abs_separated = torch.abs(separated_audios)  # (N, C, T)
+            max_abs_idx = abs_separated.argmax(dim=0)  # (C, T)
+            # gatherを使って各時刻で最大絶対値を持つ波形の実際の値を取得
+            merged_separated = torch.gather(
+                separated_audios, 0, max_abs_idx.unsqueeze(0)
+            ).squeeze(
+                0
+            )  # (C, T)
+
+            diff_audio = original_audio - merged_separated
+            diff_audio = torch.clamp(diff_audio, -1.0, 1.0)
+
+            # save diff audio
+            diff_audio_dir = os.path.join(feats_dir, "diff_audio", dataset)
+            os.makedirs(diff_audio_dir, exist_ok=True)
+            diff_audio_path = os.path.join(diff_audio_dir, f"{text_id}.wav")
+            torchaudio.save(diff_audio_path, diff_audio, sep_sr)
+
+
 def clear_gpu_memory():
     """Clear GPU memory cache"""
     import gc
@@ -824,13 +899,14 @@ def main(args):
     # clear_gpu_memory()
     # msclap_extract(dataloader, args.feats_dir, seed=args.seed)
     # clear_gpu_memory()
-    text_parse(dataloader, args.feats_dir)
-    clear_gpu_memory()
+    # text_parse(dataloader, args.feats_dir)
+    # clear_gpu_memory()
     # audio_parse(dataloader, args.feats_dir)
     # clear_gpu_memory()
-    # embed_parsed_data(dataloader, args.feats_dir, embed_model="msclap")
-    # clear_gpu_memory()
-    # embed_parsed_data(dataloader, args.feats_dir, embed_model="laionclap")
+    embed_parsed_data(dataloader, args.feats_dir, embed_model="msclap")
+    clear_gpu_memory()
+    embed_parsed_data(dataloader, args.feats_dir, embed_model="laionclap")
+    create_diff_audio(dataloader, args.feats_dir)
 
 
 ### argument parser ###
@@ -853,7 +929,7 @@ def arg_parser():
     parser.add_argument(
         "--bs",
         type=int,
-        default=1,
+        default=8,
         help="Batch size for DataLoader",
     )
     parser.add_argument(
