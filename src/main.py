@@ -72,6 +72,11 @@ class TTAEval:
             wandb.init(project="TTAEval")
             self.meta_data["wandb_url"] = wandb.run.url
 
+    def _maybe_to_device(self, value):
+        if isinstance(value, torch.Tensor):
+            return value.to(self.device)
+        return None
+
     def train(self):
         """Train the model with periodic evaluation on val and test sets."""
         train_dataset = TTADataset(data_dir=self.data_dir, split="train")
@@ -142,14 +147,22 @@ class TTAEval:
         for batch in tqdm(train_loader, desc=f"Training Epoch {epoch}"):
             laionclap_audio = batch["laionclap_audio"].to(self.device)
             laionclap_text = batch["laionclap_text"].to(self.device)
+            laionclap_parsed_audio = self._maybe_to_device(
+                batch.get("laionclap_parsed_audio")
+            )
+            laionclap_parsed_text = self._maybe_to_device(
+                batch.get("laionclap_parsed_text")
+            )
+            parsed_mask = self._maybe_to_device(batch.get("parsed_mask"))
             scores = batch["score"].float().to(self.device)
-            metric_ids = batch["subjective_metric_id"].to(self.device)  # [B]
-
             self.optimizer.zero_grad()
-            preds = self.model(laionclap_audio, laionclap_text, metric_ids).squeeze(
-                -1
-            )  # [B]
-
+            preds = self.model(
+                laionclap_audio,
+                laionclap_text,
+                laionclap_parsed_audio,
+                laionclap_parsed_text,
+                parsed_mask,
+            ).squeeze(-1)
             loss = self.criterion(preds, scores)
             loss.backward()
             self.optimizer.step()
@@ -344,7 +357,7 @@ def parse_args():
         "--test_dataset_names",
         type=str,
         nargs="+",
-        default=["relate", "audiocap", "musiccap", "aishell7b"],
+        default=["relate", "audiocap", "musiccap", "aishell7b", "clotho"],
         help="List of dataset names to test on",
     )
     # logging
