@@ -16,10 +16,6 @@ class TTADataset(Dataset):
         dataset_names: list[
             Literal["relate", "audiocap", "musiccap", "xacle", "aishell7b", "clotho"]
         ] = [
-            "relate",
-            "audiocap",
-            "musiccap",
-            "aishell7b",
             "clotho",
         ],
         split: Literal["train", "val", "test"] = "train",
@@ -433,46 +429,6 @@ class TTADataset(Dataset):
             feats_name="passt_audio_ref",
             dataset_name=dataset_name,
             file_name=ref_audio_file_name,
-        )
-
-        data["msclap_parsed_audio"] = self._pad_or_truncate_feats(
-            self._load_pre_extracted_feats(
-                feats_name="msclap_parsed_audio",
-                dataset_name=dataset_name,
-                file_name=text_file_name,
-                dim=msclap_dim,
-            )
-        )
-        data["msclap_parsed_text"] = self._pad_or_truncate_feats(
-            self._load_pre_extracted_feats(
-                feats_name="msclap_parsed_text",
-                dataset_name=dataset_name,
-                file_name=text_file_name,
-                dim=msclap_dim,
-            )
-        )
-        data["laionclap_parsed_audio"] = self._pad_or_truncate_feats(
-            self._load_pre_extracted_feats(
-                feats_name="laionclap_parsed_audio",
-                dataset_name=dataset_name,
-                file_name=text_file_name,
-                dim=laionclap_dim,
-            )
-        )
-        data["laionclap_parsed_text"] = self._pad_or_truncate_feats(
-            self._load_pre_extracted_feats(
-                feats_name="laionclap_parsed_text",
-                dataset_name=dataset_name,
-                file_name=text_file_name,
-                dim=laionclap_dim,
-            )
-        )
-        data["parsed_mask"] = self._pad_or_truncate_mask(
-            self._load_pre_extracted_mask(
-                feats_name="parsed_mask",
-                dataset_name=dataset_name,
-                file_name=text_file_name,
-            )
         )
         return data
 

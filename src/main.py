@@ -338,7 +338,7 @@ def parse_args():
         "--test_dataset_names",
         type=str,
         nargs="+",
-        default=["relate", "audiocap", "musiccap", "aishell7b", "clotho"],
+        default=["clotho"],
         help="List of dataset names to test on",
     )
     # logging
