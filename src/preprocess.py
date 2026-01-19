@@ -14,7 +14,8 @@ from pydantic import BaseModel, Field
 from sam_audio import SAMAudio, SAMAudioProcessor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from transformers import AutoModelForCausalLM, AutoTokenizer, ClapModel, ClapProcessor
+from transformers import (AutoModelForCausalLM, AutoTokenizer, ClapModel,
+                          ClapProcessor)
 
 from dataset import TTADataset
 from utils.helper_func import fix_seed
@@ -627,10 +628,13 @@ def laionclap_extract(dataloader, feats_dir: str):
         )
 
 
-def text_parse(dataloader, feats_dir: str):
-    # text_parser = GeminiTextParser()
-    text_parser = GPTTextParser()
-    # text_parser = QwenTextParser()
+def text_parse(dataloader, feats_dir: str, model: str = "gpt"):
+    if model == "gemini":
+        text_parser = GeminiTextParser()
+    elif model == "gpt":
+        text_parser = GPTTextParser()
+    elif model == "qwen":
+        text_parser = QwenTextParser()
 
     cache: dict[str, list[str]] = {}  # text -> parsed events
 
@@ -893,20 +897,20 @@ def main(args):
     dataset = TTAPreprocessDataset(data_dir=args.data_dir, split=args.split)
     dataloader = DataLoader(dataset, batch_size=args.bs, shuffle=False)
 
-    # humanclap_extract(dataloader, args.feats_dir)
-    # clear_gpu_memory()
-    # laionclap_extract(dataloader, args.feats_dir)
-    # clear_gpu_memory()
-    # msclap_extract(dataloader, args.feats_dir, seed=args.seed)
-    # clear_gpu_memory()
-    # text_parse(dataloader, args.feats_dir)
+    humanclap_extract(dataloader, args.feats_dir)
+    clear_gpu_memory()
+    laionclap_extract(dataloader, args.feats_dir)
+    clear_gpu_memory()
+    msclap_extract(dataloader, args.feats_dir, seed=args.seed)
+    clear_gpu_memory()
+    # text_parse(dataloader, args.feats_dir, model = "gpt")
     # clear_gpu_memory()
     # audio_parse(dataloader, args.feats_dir)
     # clear_gpu_memory()
-    embed_parsed_data(dataloader, args.feats_dir, embed_model="msclap")
-    clear_gpu_memory()
-    embed_parsed_data(dataloader, args.feats_dir, embed_model="laionclap")
-    create_diff_audio(dataloader, args.feats_dir)
+    # embed_parsed_data(dataloader, args.feats_dir, embed_model="msclap")
+    # clear_gpu_memory()
+    # embed_parsed_data(dataloader, args.feats_dir, embed_model="laionclap")
+    # create_diff_audio(dataloader, args.feats_dir)
 
 
 ### argument parser ###

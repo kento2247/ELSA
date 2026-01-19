@@ -26,6 +26,13 @@ gdown 1KjrZAzmd3k3BWZ0XofwvOG-0jvsiRjCQ
 unzip MusicEval-full.zip
 rm MusicEval-full.zip
 
+# Download Clotho dataset
+git clone git@github.com:lourson1091/audiobertscore.git
+mkdir clotho
+mv audiobertscore/wave_all_16k clotho
+mv audiobertscore/clotho_ovl_rel_test_set.csv clotho
+rm -rf audiobertscore
+
 cd ..
 mkdir -p models
 cd models
