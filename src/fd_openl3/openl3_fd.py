@@ -1,5 +1,6 @@
 import glob
 import os
+from pathlib import Path
 
 import librosa
 import numpy as np
@@ -99,10 +100,10 @@ def extract_embeddings(
     Returns:
     -- list of embeddings: [np.array[], ...], as expected by calculate_frechet_distance()
     """
-
-    wav_files = glob.glob(directory_path)
-    if len(wav_files) == 0:
-        raise ValueError("No files with this extension in this path!")
+    
+    wav_files = glob.glob(glob.escape(directory_path))
+    # if len(wav_files) == 0:
+    #     raise ValueError("No files with this extension in this path!")
     model = openl3.models.load_audio_embedding_model(
         input_repr="mel256", content_type=content_type, embedding_size=512
     )

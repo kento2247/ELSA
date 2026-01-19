@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 from fd_openl3.openl3_fd import calculate_embd_statistics, calculate_frechet_distance
 
 

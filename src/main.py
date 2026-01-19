@@ -288,8 +288,9 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Audio Captioning Evaluation")
     # mode
     parser.add_argument(
-        "mode",
+        "--mode",
         type=str,
+        default="test",
         choices=["train", "test"],
         help="Mode: train or test",
     )
@@ -333,7 +334,7 @@ def parse_args():
         "--test_dataset_names",
         type=str,
         nargs="+",
-        default=["relate", "audiocap", "musiccap", "aishell7b"],
+        default=["clotho"],
         help="List of dataset names to test on",
     )
     # logging
@@ -381,10 +382,6 @@ if __name__ == "__main__":
     if args.mode == "train":
         raise NotImplementedError("Training mode is currently disabled.")
     elif args.mode == "test":
-<<<<<<< HEAD
-        evaluator.test()
-=======
         test_metrics = evaluator.test()
         lb_text = format_leaderboard_text(evaluator.meta_data, test_metrics)
         print(f"Leaderboard Text:\n{lb_text}")
->>>>>>> feature/clotho_dataset

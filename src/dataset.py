@@ -16,10 +16,6 @@ class TTADataset(Dataset):
         dataset_names: list[
             Literal["relate", "audiocap", "musiccap", "xacle", "aishell7b", "clotho"]
         ] = [
-            "relate",
-            "audiocap",
-            "musiccap",
-            "aishell7b",
             "clotho",
         ],
         split: Literal["train", "val", "test"] = "train",
