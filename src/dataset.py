@@ -14,18 +14,20 @@ class TTADataset(Dataset):
         data_dir: str,
         subjective_metrics: list[Literal["REL", "OVL"]] = ["REL", "OVL"],
         dataset_names: list[
-            Literal["relate", "audiocap", "musiccap", "aishell7b"]
+            Literal["relate", "audiocap", "musiccap", "xacle", "aishell7b", "clotho"]
         ] = [
             "relate",
             "audiocap",
             "musiccap",
             "aishell7b",
+            "clotho",
         ],
         split: Literal["train", "val", "test"] = "train",
         bitrate: int = 16000,
         max_len: int = 16000 * 10,
         dtype: torch.dtype = torch.float32,
         pre_load_features: bool = False,
+        parsed_seq_size: int = 20,
     ):
         """Initialize TTADataset with specified data directory and split."""
         self.data_dir = data_dir
@@ -33,6 +35,7 @@ class TTADataset(Dataset):
         self.max_len = max_len
         self.dtype = dtype
         self.pre_load_features = pre_load_features
+        self.parsed_seq_size = parsed_seq_size
         self.database = []
         for subjective_metric in subjective_metrics:
             if "relate" in dataset_names:
@@ -45,6 +48,8 @@ class TTADataset(Dataset):
                 self._load_xacle_data(split, subjective_metric)
             if "aishell7b" in dataset_names:
                 self._load_aishell7b_data(split, subjective_metric)
+            if "clotho" in dataset_names:
+                self._load_clotho_data(split, subjective_metric)
 
         if pre_load_features:
             for i in tqdm(
@@ -103,6 +108,7 @@ class TTADataset(Dataset):
                     "ref_audio_file_path": ref_audio_file_path,
                     "text": text,
                     "score": score,
+                    "subjective_metric_id": 0 if subjective_metric == "REL" else 1,
                 }
             )
 
@@ -144,6 +150,7 @@ class TTADataset(Dataset):
                     ),
                     "text": text,
                     "score": score,
+                    "subjective_metric_id": 0 if subjective_metric == "REL" else 1,
                 }
             )
 
@@ -185,6 +192,7 @@ class TTADataset(Dataset):
                     ),
                     "text": text,
                     "score": score,
+                    "subjective_metric_id": 0 if subjective_metric == "REL" else 1,
                 }
             )
 
@@ -237,6 +245,49 @@ class TTADataset(Dataset):
                     "ref_audio_file_path": ref_audio_file_path,
                     "text": text,
                     "score": score,
+                    "subjective_metric_id": 0 if subjective_metric == "REL" else 1,
+                }
+            )
+
+    def _load_clotho_data(self, split: str, subjective_metric: str) -> None:
+        """Load Clotho dataset as test sets."""
+        max_score = 5.0
+        if split != "test":
+            return
+        clotho_data_path = os.path.join(
+            self.data_dir, "clotho", "clotho_ovl_rel_test_set.csv"
+        )
+        clotho_data = pd.read_csv(clotho_data_path)
+
+        for index, row in tqdm(
+            clotho_data.iterrows(),
+            total=len(clotho_data),
+            desc=f"Loading Clotho {split} {subjective_metric} data",
+        ):
+            text_id: str = f"{split}_{subjective_metric}_{index}"
+            text: str = row["Text"]
+            model: str = row["Model"]
+            file_name: str = row["File Name"]
+            score: float = (
+                float(row[subjective_metric]) / max_score
+            )  # normalize to [0, 1]
+
+            if model == "real":
+                continue
+
+            self.database.append(
+                {
+                    "dataset": "clotho",
+                    "text_id": text_id,
+                    "audio_file_path": os.path.join(
+                        self.data_dir, "clotho", "wave_all_16k", model, file_name
+                    ),
+                    "ref_audio_file_path": os.path.join(
+                        self.data_dir, "clotho", "wave_all_16k", "real", file_name
+                    ),
+                    "text": text,
+                    "score": score,
+                    "subjective_metric_id": 0 if subjective_metric == "REL" else 1,
                 }
             )
 
@@ -256,7 +307,9 @@ class TTADataset(Dataset):
         mos_list_path = os.path.join(
             self.data_dir, "MusicEval-full", "sets", f"{split_name}_mos_list.txt"
         )
-        mos_data = pd.read_csv(mos_list_path, header=None, names=["filename", "ovl", "rel"])
+        mos_data = pd.read_csv(
+            mos_list_path, header=None, names=["filename", "ovl", "rel"]
+        )
 
         for index, row in tqdm(
             mos_data.iterrows(),
@@ -294,6 +347,7 @@ class TTADataset(Dataset):
                     "ref_audio_file_path": ref_audio_file_path,
                     "text": text,
                     "score": score,
+                    "subjective_metric_id": 0 if subjective_metric == "REL" else 1,
                 }
             )
 
@@ -318,15 +372,25 @@ class TTADataset(Dataset):
         return len(self.database)
 
     def _load_pre_extracted_feats(
-        self, feats_name: str, dataset_name: str, file_name: str
+        self, feats_name: str, dataset_name: str, file_name: str, dim: int = None
     ) -> torch.Tensor:
         """Load pre-extracted features from the specified file path."""
         feats_dir = os.path.join(self.data_dir, "features", feats_name)
         feat_path = os.path.join(feats_dir, dataset_name, file_name)
         if not os.path.exists(feat_path):
-            raise FileNotFoundError(f"Feature file not found: {feat_path}")
+            return torch.empty(0, dim)
         feats = torch.load(feat_path, map_location="cpu")
         return feats.to(self.dtype)
+
+    def _load_pre_extracted_mask(
+        self, feats_name: str, dataset_name: str, file_name: str
+    ) -> torch.Tensor:
+        """Load pre-extracted mask without dtype casting."""
+        feats_dir = os.path.join(self.data_dir, "features", feats_name)
+        feat_path = os.path.join(feats_dir, dataset_name, file_name)
+        if not os.path.exists(feat_path):
+            return torch.empty(0, dtype=torch.bool)
+        return torch.load(feat_path, map_location="cpu")
 
     def _load_features(self, data):
         """Pre-load all features into memory to speed up data loading."""
@@ -380,6 +444,36 @@ class TTADataset(Dataset):
         data["openl3_audio"] = audio_feat
         data["openl3_ref_audio"] = ref_audio_feat
         return data
+
+    def _pad_or_truncate_feats(self, feats: torch.Tensor) -> torch.Tensor:
+        """Pad or truncate parsed features to a fixed sequence length."""
+        if feats is None:
+            return None
+        target_len = self.parsed_seq_size
+        cur_len = feats.shape[0]
+        if cur_len == target_len:
+            return feats
+        if cur_len > target_len:
+            return feats[:target_len]
+        pad_size = target_len - cur_len
+        pad = torch.zeros(
+            pad_size, feats.shape[1], dtype=feats.dtype, device=feats.device
+        )
+        return torch.cat([feats, pad], dim=0)
+
+    def _pad_or_truncate_mask(self, mask: torch.Tensor) -> torch.Tensor:
+        """Pad or truncate parsed mask to a fixed sequence length."""
+        if mask is None:
+            return None
+        target_len = self.parsed_seq_size
+        cur_len = mask.shape[0]
+        if cur_len == target_len:
+            return mask
+        if cur_len > target_len:
+            return mask[:target_len]
+        pad_size = target_len - cur_len
+        pad = torch.zeros(pad_size, dtype=mask.dtype, device=mask.device)
+        return torch.cat([mask, pad], dim=0)
 
     def __getitem__(self, idx):
         """Get item by index from the dataset."""

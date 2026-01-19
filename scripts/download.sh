@@ -12,19 +12,26 @@ aria2c -x10 -s10 -k1M https://zenodo.org/records/10737388/files/human_eval.zip?d
 unzip human_eval.zip
 rm human_eval.zip
 
-# Download XACLE dataset
-aria2c -x10 -s10 -k1M https://y-okamoto.sakura.ne.jp/XACLE_Challenge/2025/dataset/XACLE_dataset_train_val.zip
-aria2c -x10 -s10 -k1M https://y-okamoto.sakura.ne.jp/XACLE_Challenge/2025/dataset/XACLE_test_data_with_score.zip
-unzip XACLE_dataset_train_val.zip
-unzip XACLE_test_data_with_score.zip
-rm XACLE_dataset_train_val.zip
-rm XACLE_test_data_with_score.zip
-rm -rf __MACOSX
+# # Download XACLE dataset
+# aria2c -x10 -s10 -k1M https://y-okamoto.sakura.ne.jp/XACLE_Challenge/2025/dataset/XACLE_dataset_train_val.zip
+# aria2c -x10 -s10 -k1M https://y-okamoto.sakura.ne.jp/XACLE_Challenge/2025/dataset/XACLE_test_data_with_score.zip
+# unzip XACLE_dataset_train_val.zip
+# unzip XACLE_test_data_with_score.zip
+# rm XACLE_dataset_train_val.zip
+# rm XACLE_test_data_with_score.zip
+# rm -rf __MACOSX
 
 # Download AISHELL-7A dataset
 gdown 1KjrZAzmd3k3BWZ0XofwvOG-0jvsiRjCQ
 unzip MusicEval-full.zip
 rm MusicEval-full.zip
+
+# Download Clotho dataset
+git clone git@github.com:lourson1091/audiobertscore.git
+mkdir clotho
+mv audiobertscore/wave_all_16k clotho
+mv audiobertscore/clotho_ovl_rel_test_set.csv clotho
+rm -rf audiobertscore
 
 cd ..
 mkdir -p models
