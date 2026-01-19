@@ -121,15 +121,20 @@ class QwenTextParser:
     def _build_chat_template(self, text: str) -> str:
         """Build chat template from text"""
         system_prompt = "Output only a JSON array of strings."
-        user_prompt = f"""Split the caption into separate sound events. Keep all modifiers (adjectives, adverbs, descriptions).
+        user_prompt = f"""Split the caption into a list of distinct sound events.
+Preserve all modifiers (adjectives, adverbs, and descriptive phrases).
+Do NOT include any temporal or sequential information (e.g., order, timing, repetition, before/after).
+Do NOT output duplicate or semantically overlapping sound events.
+If the same sound event appears multiple times, keep only the most informative occurrence.
 
-        Caption: {text}
+Caption:
+{text}
 
-        Example:
-        Caption: A large dog barks loudly while heavy rain falls on the metal roof.
-        Output: ["A large dog barks loudly", "heavy rain falls on the metal roof"]
+Example:
+Caption: Birds chirp loudly in the distance; a person talks nearby; more chirping.
+Output: ["Birds chirp loudly in the distance", "A person talks nearby"]
 
-        Output:"""
+Output: """
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
@@ -238,7 +243,7 @@ class QwenTextParser:
 
 class SamAudio:
     def __init__(
-        self, model_name: str = "facebook/sam-audio-small", dtype=torch.bfloat16
+        self, model_name: str = "facebook/sam-audio-large-tv", dtype=torch.bfloat16
     ):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.dtype = dtype
@@ -251,26 +256,26 @@ class SamAudio:
     def separate_audio(
         self,
         audio_file: str,
-        descriptions: list[str],
-        predict_spans: bool = False,
-        reranking_candidates: int = 1,
-    ) -> dict[str, torch.Tensor]:
+        prompts: list[str],
+        predict_spans: bool = True,
+        reranking_candidates: int = 5,
+    ) -> list[torch.Tensor]:
         """
-        Separate audio based on text descriptions.
+        Separate audio based on text prompts.
         Args:
             audio_file: Path to audio file.
-            descriptions: List of text descriptions for separation.
+            prompts: List of text prompts for separation.
             predict_spans: Whether to predict spans (better quality but slower).
             reranking_candidates: Number of reranking candidates.
         Returns:
-            Dict mapping description to separated audio tensor.
+            List of separated audio tensors.
         """
-        separated_audios = {}
-        for description in descriptions:
-            with torch.no_grad():
+        separated_audios = []
+        for prompt in prompts:
+            with torch.inference_mode():
                 batch = self.processor(
                     audios=[audio_file],
-                    descriptions=[description],
+                    descriptions=[prompt],
                 ).to(self.device)
                 # Only convert audio tensors to dtype, keep index tensors as int64
                 batch.audios = batch.audios.to(self.dtype)
@@ -280,7 +285,7 @@ class SamAudio:
                     reranking_candidates=reranking_candidates,
                 )
 
-            separated_audios[description] = result.target[0]
+            separated_audios.append(result.target[0])
         return separated_audios
 
     def save_audio(
@@ -489,62 +494,36 @@ def passt_extract(dataloader, feats_dir: str):
             )
 
 
-def text_parse(dataloader, feats_dir: str):
-    qwen_text_parser = QwenTextParser()
-    for batch in tqdm(dataloader, desc="Parsing Text with Qwen"):
-        texts = batch["text"]
-        text_ids = batch["text_id"]
-        datasets = batch["dataset"]
-
-        # Check if all files in batch already exist
-        all_exist = True
-        for text_id, dataset in zip(text_ids, datasets):
-            save_path = os.path.join(
-                feats_dir, "parsed_texts", dataset, f"{text_id}.json"
-            )
-            if not os.path.exists(save_path):
-                all_exist = False
-                break
-        if all_exist:
-            continue
-
-        # Implement text parsing logic here using qwen_text_parser
-        audio_sources: list[str] = qwen_text_parser.parse_texts(texts)
-
-        for text_id, dataset, sources in zip(text_ids, datasets, audio_sources):
-            save_path = os.path.join(
-                feats_dir, "parsed_texts", dataset, f"{text_id}.json"
-            )
-            os.makedirs(os.path.dirname(save_path), exist_ok=True)
-            with open(save_path, "w") as f:
-                json.dump(sources, f, ensure_ascii=False, indent=0)
-
-
-def music_parse(dataloader, feats_dir: str):
-    """Parse music audio using SAM-Audio based on splited text"""
+def audio_parse(dataloader, feats_dir: str):
+    """Parse audio using SAM-Audio based on parsed text sources"""
     sam_audio = SamAudio()
-    for batch in tqdm(dataloader, desc="Parsing Music with SAM-Audio"):
+    for batch in tqdm(dataloader, desc="Parsing Audio with SAM-Audio"):
         audio_files = batch["audio_file_path"]
         text_ids = batch["text_id"]
         datasets = batch["dataset"]
 
         for text_id, dataset, audio_file in zip(text_ids, datasets, audio_files):
-            # Load parsed text prompts
+            # Load parsed audio sources
             text_path = os.path.join(
                 feats_dir, "parsed_texts", dataset, f"{text_id}.json"
             )
             with open(text_path, "r") as f:
-                text_prompts = json.load(f)
+                audio_sources = json.load(f)
+            audio_sources = [src.lower() for src in audio_sources]
+            save_dir = os.path.join(feats_dir, "separated_audio", dataset, text_id)
+            os.makedirs(save_dir, exist_ok=True)
 
-            # Split audio using SAM-Audio
-            separated_audios: dict[str, torch.Tensor] = sam_audio.separate_audio(
-                audio_file, text_prompts
-            )
+            if len(os.listdir(save_dir)) == len(audio_sources):
+                continue
+
+            # Split audio using SAM-Audio with automatic mixed precision
+            with torch.amp.autocast("cuda"):
+                separated_audios: list[torch.Tensor] = sam_audio.separate_audio(
+                    audio_file, audio_sources
+                )
 
             # Save separated audio files
-            for i, (description, audio_tensor) in enumerate(separated_audios.items()):
-                save_dir = os.path.join(feats_dir, "separated_audio", dataset, text_id)
-                os.makedirs(save_dir, exist_ok=True)
+            for i, audio_tensor in enumerate(separated_audios):
                 save_path = os.path.join(save_dir, f"{i}.wav")
                 sam_audio.save_audio(save_path, audio_tensor)
 
@@ -575,12 +554,12 @@ def embed_parsed_data(
         datasets = batch["dataset"]
 
         for text_id, dataset in zip(text_ids, datasets):
-            # Load parsed text prompts
+            # Load parsed audio sources
             text_path = os.path.join(
                 feats_dir, "parsed_texts", dataset, f"{text_id}.json"
             )
             with open(text_path, "r") as f:
-                text_prompts: list[str] = json.load(f)
+                audio_sources: list[str] = json.load(f)
 
             # Load separated audio files
             audio_dir = os.path.join(feats_dir, "separated_audio", dataset, text_id)
@@ -592,11 +571,19 @@ def embed_parsed_data(
                 ]
             )
 
+            if len(audio_files) == 0 and len(audio_sources) == 0:
+                print(text_id, dataset)
+                continue
+            if not len(audio_files) == len(audio_sources):
+                raise ValueError(
+                    f"Number of separated audio files ({len(audio_files)}) does not match number of audio sources ({len(audio_sources)}) for {text_id} in {dataset}."
+                )
+
             # Embed audio and text
             audio_embeddings = embedder.embed_audios(audio_files)  # [N, D]
-            text_embeddings = embedder.embed_texts(text_prompts)  # [N, D]
+            text_embeddings = embedder.embed_texts(audio_sources)  # [N, D]
 
-            num_segments = len(audio_files)
+            num_segments = audio_embeddings.shape[0]
             embed_dim = audio_embeddings.shape[-1]
 
             # Create mask for valid positions
@@ -607,12 +594,20 @@ def embed_parsed_data(
             # Pad or truncate to seq_size
             if num_segments < seq_size:
                 pad_size = seq_size - num_segments
-                audio_embeddings = torch.cat(
-                    [audio_embeddings, torch.zeros(pad_size, embed_dim)], dim=0
+                audio_pad = torch.zeros(
+                    pad_size,
+                    embed_dim,
+                    device=audio_embeddings.device,
+                    dtype=audio_embeddings.dtype,
                 )
-                text_embeddings = torch.cat(
-                    [text_embeddings, torch.zeros(pad_size, embed_dim)], dim=0
+                text_pad = torch.zeros(
+                    pad_size,
+                    embed_dim,
+                    device=text_embeddings.device,
+                    dtype=text_embeddings.dtype,
                 )
+                audio_embeddings = torch.cat([audio_embeddings, audio_pad], dim=0)
+                text_embeddings = torch.cat([text_embeddings, text_pad], dim=0)
             else:
                 audio_embeddings = audio_embeddings[:seq_size]
                 text_embeddings = text_embeddings[:seq_size]
@@ -641,6 +636,74 @@ def embed_parsed_data(
             )
 
 
+def create_diff_audio(dataloader, feats_dir: str):
+    """Parse audio using SAM-Audio based on parsed text sources"""
+    for batch in tqdm(dataloader, desc="Parsing Audio with SAM-Audio"):
+        audio_files = batch["audio_file_path"]
+        text_ids = batch["text_id"]
+        datasets = batch["dataset"]
+
+        for text_id, dataset, audio_file in zip(text_ids, datasets, audio_files):
+            separated_audio_dir = os.path.join(
+                feats_dir, "separated_audio", dataset, text_id
+            )
+
+            # Skip if separated audio directory doesn't exist
+            if not os.path.exists(separated_audio_dir):
+                continue
+
+            separated_audio_files = sorted(
+                [
+                    os.path.join(separated_audio_dir, f)
+                    for f in os.listdir(separated_audio_dir)
+                    if f.endswith(".wav")
+                ]
+            )
+
+            # Skip if no separated audio files exist
+            if len(separated_audio_files) == 0:
+                continue
+
+            # separated_audiosに含まれない音だけを抽出する
+            # 各時刻で最大振幅を持つseparated_audioの値を取り、それをoriginal_audioから引く
+            original_audio, orig_sr = torchaudio.load(audio_file)
+            separated_audios = []
+            for sep_audio_file in separated_audio_files:
+                audio, sep_sr = torchaudio.load(sep_audio_file)
+                separated_audios.append(audio)
+            separated_audios = torch.stack(separated_audios, dim=0)  # (N, C, T)
+
+            # Resample original audio to match separated audio sample rate
+            if orig_sr != sep_sr:
+                resampler = torchaudio.transforms.Resample(orig_sr, sep_sr)
+                original_audio = resampler(original_audio)
+
+            # Match lengths (truncate or pad to shorter length)
+            orig_len = original_audio.shape[-1]
+            sep_len = separated_audios.shape[-1]
+            min_len = min(orig_len, sep_len)
+            original_audio = original_audio[..., :min_len]
+            separated_audios = separated_audios[..., :min_len]
+
+            # 各時刻で最大絶対値を持つseparated_audioの値を使用（波形のset）
+            # これにより、同じ音が複数回抽出されても逆位相にならない
+            abs_separated = torch.abs(separated_audios)  # (N, C, T)
+            max_abs_idx = abs_separated.argmax(dim=0)  # (C, T)
+            # gatherを使って各時刻で最大絶対値を持つ波形の実際の値を取得
+            merged_separated = torch.gather(
+                separated_audios, 0, max_abs_idx.unsqueeze(0)
+            ).squeeze(0)  # (C, T)
+
+            diff_audio = original_audio - merged_separated
+            diff_audio = torch.clamp(diff_audio, -1.0, 1.0)
+
+            # save diff audio
+            diff_audio_dir = os.path.join(feats_dir, "diff_audio", dataset)
+            os.makedirs(diff_audio_dir, exist_ok=True)
+            diff_audio_path = os.path.join(diff_audio_dir, f"{text_id}.wav")
+            torchaudio.save(diff_audio_path, diff_audio, sep_sr)
+
+
 def clear_gpu_memory():
     """Clear GPU memory cache"""
     import gc
@@ -659,9 +722,10 @@ def main(args):
     # clear_gpu_memory()
     # msclap_extract(dataloader, args.feats_dir, seed=args.seed)
     # clear_gpu_memory()
-    # text_parse(dataloader, args.feats_dir)
+    # embed_parsed_data(dataloader, args.feats_dir, embed_model="msclap")
     # clear_gpu_memory()
-    # music_parse(dataloader, args.feats_dir)
+    # embed_parsed_data(dataloader, args.feats_dir, embed_model="laionclap")
+    # create_diff_audio(dataloader, args.feats_dir)
 
 
 ### argument parser ###
@@ -684,7 +748,7 @@ def arg_parser():
     parser.add_argument(
         "--bs",
         type=int,
-        default=1,
+        default=8,
         help="Batch size for DataLoader",
     )
     parser.add_argument(

@@ -72,6 +72,11 @@ class TTAEval:
             wandb.init(project="TTAEval")
             self.meta_data["wandb_url"] = wandb.run.url
 
+    def _maybe_to_device(self, value):
+        if isinstance(value, torch.Tensor):
+            return value.to(self.device)
+        return None
+
     def train(self):
         """Train the model with periodic evaluation on val and test sets."""
         train_dataset = TTADataset(data_dir=self.data_dir, split="train")
@@ -105,23 +110,26 @@ class TTAEval:
                 wandb.log({"epoch": epoch, "train_loss": train_loss})
 
             if (epoch - 1) % self.eval_freq == 0:
-                val_metrics = self.evaluate(val_loader, desc="Validation")
-                print(f"Epoch {epoch}/{self.epochs} - Val Metrics: {val_metrics}")
+                val_metrics = self.evaluate(val_loader, desc="Validation")["metrics"]
+                val_metric = val_metrics[self.main_metric]
+                is_best_epoch = val_metric > best_val_metric
+
+                print(
+                    f"Epoch {epoch}/{self.epochs} - Val Metrics: {val_metrics}, Best: {is_best_epoch}"
+                )
 
                 if self.log_wandb:
                     wandb.log({"epoch": epoch, "val": val_metrics})
 
                 print(f"Running test at epoch {epoch}...")
-                test_metrics = self.test()
+                test_metrics = self.test(
+                    save_qualitative=self.save_qualitative and is_best_epoch
+                )
 
-                val_metric = val_metrics[self.main_metric]
-                if val_metric > best_val_metric:
+                if is_best_epoch:
                     best_val_metric = val_metric
                     best_epoch = epoch
                     self.save_model("best_model.pt")
-                    print(
-                        f"Best model saved with val_{self.main_metric}: {val_metric:.4f}"
-                    )
                     best_test_metrics = test_metrics
 
         print(f"Training completed. Best epoch: {best_epoch}")
@@ -139,10 +147,22 @@ class TTAEval:
         for batch in tqdm(train_loader, desc=f"Training Epoch {epoch}"):
             laionclap_audio = batch["laionclap_audio"].to(self.device)
             laionclap_text = batch["laionclap_text"].to(self.device)
+            laionclap_parsed_audio = self._maybe_to_device(
+                batch.get("laionclap_parsed_audio")
+            )
+            laionclap_parsed_text = self._maybe_to_device(
+                batch.get("laionclap_parsed_text")
+            )
+            parsed_mask = self._maybe_to_device(batch.get("parsed_mask"))
             scores = batch["score"].float().to(self.device)
-
             self.optimizer.zero_grad()
-            preds = self.model(laionclap_audio, laionclap_text).squeeze(-1)
+            preds = self.model(
+                laionclap_audio,
+                laionclap_text,
+                laionclap_parsed_audio,
+                laionclap_parsed_text,
+                parsed_mask,
+            ).squeeze(-1)
             loss = self.criterion(preds, scores)
             loss.backward()
             self.optimizer.step()
@@ -157,12 +177,14 @@ class TTAEval:
         self.model.eval()
         all_preds: list[np.ndarray] = []
         all_scores: list[np.ndarray] = []
+        all_audio_file_paths: list[str] = []
 
         with torch.no_grad():
             for batch in tqdm(data_loader, desc=desc):
                 passt_audio = batch["passt_audio"].to(self.device)
                 passt_audio_ref = batch["passt_audio_ref"].to(self.device)
                 scores = batch["score"].numpy()
+                audio_file_path = batch["audio_file_path"]
 
                 preds = (
                     self.model(passt_audio, passt_audio_ref).squeeze(-1).cpu().numpy()
@@ -170,6 +192,7 @@ class TTAEval:
 
                 all_preds.append(preds)
                 all_scores.append(scores)
+                all_audio_file_paths.extend(audio_file_path)
 
         all_preds = np.concatenate(all_preds)
         all_scores = np.concatenate(all_scores)
@@ -178,15 +201,21 @@ class TTAEval:
         all_preds = (all_preds - all_preds.min()) / (all_preds.max() - all_preds.min())
 
         return {
-            "mse": mse(all_scores, all_preds),
-            "pearson": pearson_correlation(all_scores, all_preds),
-            "spearman": spearman_correlation(all_scores, all_preds),
-            "kendall_tau": kendall_tau(all_scores, all_preds),
+            "metrics": {
+                "mse": mse(all_scores, all_preds),
+                "pearson": pearson_correlation(all_scores, all_preds),
+                "spearman": spearman_correlation(all_scores, all_preds),
+                "kendall_tau": kendall_tau(all_scores, all_preds),
+            },
+            "y_list": all_scores,
+            "y_hat_list": all_preds,
+            "audio_file_paths": all_audio_file_paths,
         }
 
-    def test(self) -> dict:
+    def test(self, save_qualitative: bool = False) -> dict:
         """Test the model on test datasets and log metrics."""
         metrics: dict = {}
+        scores: dict = {}
 
         for subjective_metric in self.subjective_metrics:
             for test_dataset_name in self.test_dataset_names:
@@ -208,20 +237,39 @@ class TTAEval:
                 del test_dataset
 
                 desc = f"Testing {subjective_metric}/{test_dataset_name}"
-                eval_metrics = self.evaluate(test_loader, desc=desc)
+                eval_result = self.evaluate(test_loader, desc=desc)
+                eval_metrics = eval_result["metrics"]
 
                 if subjective_metric not in metrics:
                     metrics[subjective_metric] = {}
+                if subjective_metric not in scores:
+                    scores[subjective_metric] = {}
                 metrics[subjective_metric][test_dataset_name] = eval_metrics
+                scores[subjective_metric][test_dataset_name] = {
+                    "y_list": eval_result["y_list"],
+                    "y_hat_list": eval_result["y_hat_list"],
+                    "audio_file_paths": eval_result["audio_file_paths"],
+                }
 
         if self.log_wandb:
             wandb.log(metrics)
 
-        if self.save_qualitative:
+        if save_qualitative:
             os.makedirs(self.model_dir, exist_ok=True)
+            # Convert numpy arrays to lists for JSON serialization
+            scores_serializable = {}
+            for metric_name, datasets in scores.items():
+                scores_serializable[metric_name] = {}
+                for dataset_name, data in datasets.items():
+                    scores_serializable[metric_name][dataset_name] = {
+                        "y_list": [float(y) for y in data["y_list"]],
+                        "y_hat_list": [float(y) for y in data["y_hat_list"]],
+                        "audio_file_paths": data["audio_file_paths"],
+                    }
             qualitative_data = {
                 "metrics": metrics,
                 "meta_data": self.meta_data,
+                "scores": scores_serializable,
             }
             qualitative_path = os.path.join(self.model_dir, "qualitative_results.json")
             with open(qualitative_path, "w") as f:
@@ -290,8 +338,7 @@ def parse_args():
         "--test_dataset_names",
         type=str,
         nargs="+",
-        # default=["relate", "audiocap", "musiccap", "xacle", "aishell7b"],
-        default=["relate", "audiocap", "musiccap"],
+        default=["relate", "audiocap", "musiccap", "aishell7b", "clotho"],
         help="List of dataset names to test on",
     )
     # logging
@@ -339,4 +386,6 @@ if __name__ == "__main__":
     if args.mode == "train":
         raise NotImplementedError("Training mode is currently disabled.")
     elif args.mode == "test":
-        evaluator.test()
+        test_metrics = evaluator.test()
+        lb_text = format_leaderboard_text(evaluator.meta_data, test_metrics)
+        print(f"Leaderboard Text:\n{lb_text}")
