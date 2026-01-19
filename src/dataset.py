@@ -14,12 +14,13 @@ class TTADataset(Dataset):
         data_dir: str,
         subjective_metrics: list[Literal["REL", "OVL"]] = ["REL", "OVL"],
         dataset_names: list[
-            Literal["relate", "audiocap", "musiccap", "xacle", "aishell7b"]
+            Literal["relate", "audiocap", "musiccap", "xacle", "aishell7b", "clotho"]
         ] = [
             "relate",
             "audiocap",
             "musiccap",
             "aishell7b",
+            "clotho",
         ],
         split: Literal["train", "val", "test"] = "train",
         bitrate: int = 16000,
@@ -45,6 +46,8 @@ class TTADataset(Dataset):
                 self._load_xacle_data(split, subjective_metric)
             if "aishell7b" in dataset_names:
                 self._load_aishell7b_data(split, subjective_metric)
+            if "clotho" in dataset_names:
+                self._load_clotho_data(split, subjective_metric)
 
         if pre_load_features:
             for i in tqdm(
@@ -296,6 +299,48 @@ class TTADataset(Dataset):
                     "ref_audio_file_path": ref_audio_file_path,
                     "text": text,
                     "score": score,
+                }
+            )
+
+    def _load_clotho_data(self, split: str, subjective_metric: str) -> None:
+        """Load Clotho dataset as test sets."""
+        max_score = 5.0
+        if split != "test":
+            return
+        clotho_data_path = os.path.join(
+            self.data_dir, "clotho", "clotho_ovl_rel_test_set.csv"
+        )
+        clotho_data = pd.read_csv(clotho_data_path)
+
+        for index, row in tqdm(
+            clotho_data.iterrows(),
+            total=len(clotho_data),
+            desc=f"Loading Clotho {split} {subjective_metric} data",
+        ):
+            text_id: str = f"{split}_{subjective_metric}_{index}"
+            text: str = row["Text"]
+            model: str = row["Model"]
+            file_name: str = row["File Name"]
+            score: float = (
+                float(row[subjective_metric]) / max_score
+            )  # normalize to [0, 1]
+
+            if model == "real":
+                continue
+
+            self.database.append(
+                {
+                    "dataset": "clotho",
+                    "text_id": text_id,
+                    "audio_file_path": os.path.join(
+                        self.data_dir, "clotho", "wave_all_16k", model, file_name
+                    ),
+                    "ref_audio_file_path": os.path.join(
+                        self.data_dir, "clotho", "wave_all_16k", "real", file_name
+                    ),
+                    "text": text,
+                    "score": score,
+                    "subjective_metric_id": 0 if subjective_metric == "REL" else 1,
                 }
             )
 

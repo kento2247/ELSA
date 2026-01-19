@@ -172,11 +172,8 @@ class TTAEval:
                 laionclap_audio = batch["laionclap_audio"].to(self.device)
                 laionclap_text = batch["laionclap_text"].to(self.device)
                 scores = batch["score"].numpy()
-                metric_ids = batch["subjective_metric_id"].to(self.device)  # [B]
 
-                preds = self.model(
-                    laionclap_audio, laionclap_text, metric_ids
-                )  # [B, 1]
+                preds = self.model(laionclap_audio, laionclap_text)  # [B, 1]
                 preds = preds.squeeze(-1).cpu().numpy()  # [B]
 
                 all_preds.append(preds)
@@ -324,7 +321,7 @@ def parse_args():
         "--test_dataset_names",
         type=str,
         nargs="+",
-        default=["relate", "audiocap", "musiccap", "aishell7b"],
+        default=["relate", "audiocap", "musiccap", "aishell7b", "clotho"],
         help="List of dataset names to test on",
     )
     # logging
