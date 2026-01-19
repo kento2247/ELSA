@@ -406,75 +406,8 @@ class TTADataset(Dataset):
             data["has_ref_audio"] = False
 
         """Pre-load all features into memory to speed up data loading."""
-        msclap_dim = 1024
-        laionclap_dim = 512
-        text_file_name = f"{data['text_id']}.pt"
-        audio_file_name = os.path.basename(data["audio_file_path"]).replace(
-            ".wav", ".pt"
-        )
-        dataset_name = data["dataset"]
-
         # data["audio"] = self._load_wav(data["audio_file_path"])
-        data["msclap_audio"] = self._load_pre_extracted_feats(
-            feats_name="msclap_audio",
-            dataset_name=dataset_name,
-            file_name=audio_file_name,
-        )
-        data["msclap_text"] = self._load_pre_extracted_feats(
-            feats_name="msclap_text",
-            dataset_name=dataset_name,
-            file_name=text_file_name,
-        )
-        data["laionclap_audio"] = self._load_pre_extracted_feats(
-            feats_name="laionclap_audio",
-            dataset_name=dataset_name,
-            file_name=audio_file_name,
-        )
-        data["laionclap_text"] = self._load_pre_extracted_feats(
-            feats_name="laionclap_text",
-            dataset_name=dataset_name,
-            file_name=text_file_name,
-        )
-
-        data["msclap_parsed_audio"] = self._pad_or_truncate_feats(
-            self._load_pre_extracted_feats(
-                feats_name="msclap_parsed_audio",
-                dataset_name=dataset_name,
-                file_name=text_file_name,
-                dim=msclap_dim,
-            )
-        )
-        data["msclap_parsed_text"] = self._pad_or_truncate_feats(
-            self._load_pre_extracted_feats(
-                feats_name="msclap_parsed_text",
-                dataset_name=dataset_name,
-                file_name=text_file_name,
-                dim=msclap_dim,
-            )
-        )
-        data["laionclap_parsed_audio"] = self._pad_or_truncate_feats(
-            self._load_pre_extracted_feats(
-                feats_name="laionclap_parsed_audio",
-                dataset_name=dataset_name,
-                file_name=text_file_name,
-                dim=laionclap_dim,
-            )
-        )
-        data["laionclap_parsed_text"] = self._pad_or_truncate_feats(
-            self._load_pre_extracted_feats(
-                feats_name="laionclap_parsed_text",
-                dataset_name=dataset_name,
-                file_name=text_file_name,
-                dim=laionclap_dim,
-            )
-        )
-        data["parsed_mask"] = self._pad_or_truncate_mask(
-            self._load_pre_extracted_mask(
-                feats_name="parsed_mask",
-                dataset_name=dataset_name,
-                file_name=text_file_name,
-            )
-        )
+        
         return data
 
     def _pad_or_truncate_feats(self, feats: torch.Tensor) -> torch.Tensor:

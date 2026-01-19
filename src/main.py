@@ -312,8 +312,9 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Audio Captioning Evaluation")
     # mode
     parser.add_argument(
-        "mode",
+        "--mode",
         type=str,
+        default="test",
         choices=["train", "test"],
         help="Mode: train or test",
     )
@@ -357,7 +358,7 @@ def parse_args():
         "--test_dataset_names",
         type=str,
         nargs="+",
-        default=["relate", "audiocap", "musiccap", "aishell7b", "clotho"],
+        default=["clotho"],
         help="List of dataset names to test on",
     )
     # logging
