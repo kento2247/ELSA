@@ -5,6 +5,7 @@ import re
 from typing import List
 
 import laion_clap
+import numpy as np
 import torch
 import torchaudio
 from google import genai
@@ -435,14 +436,19 @@ class SamAudio:
 class AudioCaptionModel:
     def __init__(
         self,
-        model_id: str = "mispeech/midashenglm-7b-1021-bf16",
+        model_id: str = "mispeech/midashenglm-7b-1021-w4a16-gptq",
         user_prompt: str = "Caption the audio.",
+        target_sr: int = 16000,
     ):
         self.model_id = model_id
         self.user_prompt = user_prompt
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.target_sr = target_sr
+        self.device = torch.device("cuda")
+        self.dtype = torch.bfloat16
         self.model = AutoModelForCausalLM.from_pretrained(
-            model_id, trust_remote_code=True
+            model_id,
+            trust_remote_code=True,
+            torch_dtype=self.dtype,
         ).to(self.device)
         self.tokenizer = AutoTokenizer.from_pretrained(model_id)
         from transformers import AutoProcessor
@@ -450,14 +456,27 @@ class AudioCaptionModel:
         self.processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
         self.model.eval()
 
+    def _load_audio(self, audio_file_path: str) -> np.ndarray:
+        """Load audio file using torchaudio and resample if needed."""
+        import numpy as np
+
+        audio, sr = torchaudio.load(audio_file_path)
+        audio = audio[0]  # mono
+        if sr != self.target_sr:
+            resampler = torchaudio.transforms.Resample(sr, self.target_sr)
+            audio = resampler(audio)
+        return audio.numpy()
+
     def audio2text(self, audio_file_path: str) -> str:
         """Generate caption for an audio file."""
+        audio_array = self._load_audio(audio_file_path)
+
         messages = [
             {
                 "role": "user",
                 "content": [
                     {"type": "text", "text": self.user_prompt},
-                    {"type": "audio", "path": audio_file_path},
+                    {"type": "audio", "audio": audio_array},
                 ],
             },
         ]
@@ -469,7 +488,7 @@ class AudioCaptionModel:
                 add_generation_prompt=True,
                 add_special_tokens=True,
                 return_dict=True,
-            ).to(device=self.model.device, dtype=self.model.dtype)
+            ).to(device=self.device, dtype=self.dtype)
             generation = self.model.generate(**model_inputs)
             output = self.tokenizer.batch_decode(generation, skip_special_tokens=True)
 
