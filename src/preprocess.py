@@ -14,8 +14,13 @@ from pydantic import BaseModel, Field
 from sam_audio import SAMAudio, SAMAudioProcessor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from transformers import (AutoModelForCausalLM, AutoTokenizer, ClapModel,
-                          ClapProcessor)
+from transformers import (
+    AutoModel,
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    ClapModel,
+    ClapProcessor,
+)
 
 from dataset import TTADataset
 from utils.helper_func import fix_seed
@@ -425,6 +430,102 @@ class SamAudio:
         if audio_tensor.dim() == 1:
             audio_tensor = audio_tensor.unsqueeze(0)
         torchaudio.save(save_path, audio_tensor.cpu().to(dtype), sample_rate)
+
+
+class AudioCaptionModel:
+    def __init__(
+        self,
+        model_id: str = "mispeech/midashenglm-7b-1021-bf16",
+        user_prompt: str = "Caption the audio.",
+    ):
+        self.model_id = model_id
+        self.user_prompt = user_prompt
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model = AutoModelForCausalLM.from_pretrained(
+            model_id, trust_remote_code=True
+        ).to(self.device)
+        self.tokenizer = AutoTokenizer.from_pretrained(model_id)
+        from transformers import AutoProcessor
+
+        self.processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
+        self.model.eval()
+
+    def audio2text(self, audio_file_path: str) -> str:
+        """Generate caption for an audio file."""
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": self.user_prompt},
+                    {"type": "audio", "path": audio_file_path},
+                ],
+            },
+        ]
+
+        with torch.no_grad():
+            model_inputs = self.processor.apply_chat_template(
+                messages,
+                tokenize=True,
+                add_generation_prompt=True,
+                add_special_tokens=True,
+                return_dict=True,
+            ).to(device=self.model.device, dtype=self.model.dtype)
+            generation = self.model.generate(**model_inputs)
+            output = self.tokenizer.batch_decode(generation, skip_special_tokens=True)
+
+        return output[0]
+
+
+class Qwen3Embedder:
+    def __init__(
+        self,
+        model_name: str = "Qwen/Qwen3-Embedding-0.6B",
+        max_length: int = 8192,
+    ):
+        self.model_name = model_name
+        self.max_length = max_length
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name, padding_side="left")
+        self.model = AutoModel.from_pretrained(
+            model_name,
+            attn_implementation="flash_attention_2",
+            torch_dtype=torch.float16,
+        ).to(self.device)
+        self.model.eval()
+
+    def _last_token_pool(
+        self, last_hidden_states: torch.Tensor, attention_mask: torch.Tensor
+    ) -> torch.Tensor:
+        left_padding = attention_mask[:, -1].sum() == attention_mask.shape[0]
+        if left_padding:
+            return last_hidden_states[:, -1]
+        else:
+            sequence_lengths = attention_mask.sum(dim=1) - 1
+            batch_size = last_hidden_states.shape[0]
+            return last_hidden_states[
+                torch.arange(batch_size, device=last_hidden_states.device),
+                sequence_lengths,
+            ]
+
+    def embed_texts(self, texts: list[str]) -> torch.Tensor:
+        """Embed texts in batch."""
+        batch_dict = self.tokenizer(
+            texts,
+            padding=True,
+            truncation=True,
+            max_length=self.max_length,
+            return_tensors="pt",
+        ).to(self.device)
+
+        with torch.no_grad():
+            outputs = self.model(**batch_dict)
+            embeddings = self._last_token_pool(
+                outputs.last_hidden_state, batch_dict["attention_mask"]
+            )
+            # Normalize embeddings
+            embeddings = torch.nn.functional.normalize(embeddings, p=2, dim=1)
+
+        return embeddings
 
 
 ### feature saving functions ###
@@ -885,6 +986,95 @@ def create_diff_audio(dataloader, feats_dir: str):
             torchaudio.save(diff_audio_path, diff_audio, sep_sr)
 
 
+def audio_captioning(dataloader, feats_dir: str):
+    """Generate captions for audio files using AudioCaptionModel."""
+    caption_model = AudioCaptionModel()
+
+    for batch in tqdm(dataloader, desc="Generating Audio Captions"):
+        audio_files = batch["audio_file_path"]
+        text_ids = batch["text_id"]
+        datasets = batch["dataset"]
+
+        for audio_file, text_id, dataset in zip(audio_files, text_ids, datasets):
+            save_path = os.path.join(
+                feats_dir, "audio_captions", dataset, f"{text_id}.json"
+            )
+
+            if os.path.exists(save_path):
+                continue
+
+            caption = caption_model.audio2text(audio_file)
+
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            with open(save_path, "w") as f:
+                json.dump({"caption": caption}, f, ensure_ascii=False, indent=1)
+
+
+def caption_embedding(dataloader, feats_dir: str, embed_model: str = "qwen3"):
+    """Embed reference captions (from dataset) and candidate captions (generated)."""
+    if embed_model == "qwen3":
+        embedder = Qwen3Embedder()
+        feats_prefix = "qwen3"
+    elif embed_model == "laionclap":
+        embedder = LaionClapEmbedder()
+        feats_prefix = "laionclap"
+    elif embed_model == "msclap":
+        embedder = MSClapEmbedder()
+        feats_prefix = "msclap"
+    elif embed_model == "humanclap":
+        embedder = HumanCLAPEmbedder()
+        feats_prefix = "humanclap"
+
+    for batch in tqdm(dataloader, desc=f"Embedding Captions ({embed_model})"):
+        text_ids = batch["text_id"]
+        datasets = batch["dataset"]
+        ref_texts = batch["text"]  # Original reference captions from dataset
+
+        for text_id, dataset, ref_text in zip(text_ids, datasets, ref_texts):
+            # Check if both embeddings already exist
+            ref_save_path = os.path.join(
+                feats_dir, f"{feats_prefix}_ref_caption", dataset, f"{text_id}.pt"
+            )
+            cand_save_path = os.path.join(
+                feats_dir, f"{feats_prefix}_cand_caption", dataset, f"{text_id}.pt"
+            )
+            if os.path.exists(ref_save_path) and os.path.exists(cand_save_path):
+                continue
+
+            # Load generated caption
+            caption_path = os.path.join(
+                feats_dir, "audio_captions", dataset, f"{text_id}.json"
+            )
+            if not os.path.exists(caption_path):
+                continue
+
+            with open(caption_path, "r") as f:
+                caption_data = json.load(f)
+            cand_text = caption_data["caption"]
+
+            # Embed reference caption (from dataset)
+            if not os.path.exists(ref_save_path):
+                ref_embedding = embedder.embed_texts([ref_text])  # [1, D]
+                save_feats(
+                    feats_dir=feats_dir,
+                    feats_name=f"{feats_prefix}_ref_caption",
+                    dataset=dataset,
+                    file_name=f"{text_id}.pt",
+                    feats=ref_embedding[0],
+                )
+
+            # Embed candidate caption (generated)
+            if not os.path.exists(cand_save_path):
+                cand_embedding = embedder.embed_texts([cand_text])  # [1, D]
+                save_feats(
+                    feats_dir=feats_dir,
+                    feats_name=f"{feats_prefix}_cand_caption",
+                    dataset=dataset,
+                    file_name=f"{text_id}.pt",
+                    feats=cand_embedding[0],
+                )
+
+
 def clear_gpu_memory():
     """Clear GPU memory cache"""
     import gc
@@ -897,12 +1087,12 @@ def main(args):
     dataset = TTAPreprocessDataset(data_dir=args.data_dir, split=args.split)
     dataloader = DataLoader(dataset, batch_size=args.bs, shuffle=False)
 
-    humanclap_extract(dataloader, args.feats_dir)
-    clear_gpu_memory()
-    laionclap_extract(dataloader, args.feats_dir)
-    clear_gpu_memory()
-    msclap_extract(dataloader, args.feats_dir, seed=args.seed)
-    clear_gpu_memory()
+    # humanclap_extract(dataloader, args.feats_dir)
+    # clear_gpu_memory()
+    # laionclap_extract(dataloader, args.feats_dir)
+    # clear_gpu_memory()
+    # msclap_extract(dataloader, args.feats_dir, seed=args.seed)
+    # clear_gpu_memory()
     # text_parse(dataloader, args.feats_dir, model = "gpt")
     # clear_gpu_memory()
     # audio_parse(dataloader, args.feats_dir)
@@ -911,6 +1101,9 @@ def main(args):
     # clear_gpu_memory()
     # embed_parsed_data(dataloader, args.feats_dir, embed_model="laionclap")
     # create_diff_audio(dataloader, args.feats_dir)
+    audio_captioning(dataloader, args.feats_dir)
+    clear_gpu_memory()
+    caption_embedding(dataloader, args.feats_dir, embed_model="qwen3")
 
 
 ### argument parser ###
