@@ -19,6 +19,7 @@ FEATURES_DIR = DATA_DIR / "features"
 PARSED_TEXTS_DIR = FEATURES_DIR / "parsed_texts"
 SEPARATED_AUDIO_DIR = FEATURES_DIR / "separated_audio"
 DIFF_AUDIO_DIR = FEATURES_DIR / "diff_audio"
+AUDIO_CAPTIONS_DIR = FEATURES_DIR / "audio_captions"
 
 DATASETS = ["relate", "audiocap", "musiccap", "aishell7b"]
 
@@ -232,6 +233,15 @@ HTML_TEMPLATE = """
                     {% endif %}
                     {% else %}
                     <div class="warning">Metadata not found for this text_id</div>
+                    {% endif %}
+                </div>
+
+                <div class="card" style="margin-top: 20px;">
+                    <h2>Generated Caption (Audio Captioning)</h2>
+                    {% if generated_caption %}
+                    <div class="text-content" style="border-left-color: #6f42c1;">{{ generated_caption }}</div>
+                    {% else %}
+                    <div class="warning">Generated caption not found</div>
                     {% endif %}
                 </div>
 
@@ -674,6 +684,17 @@ def load_parsed_text(dataset: str, text_id: str) -> list[str] | None:
         return json.load(f)
 
 
+def load_generated_caption(dataset: str, text_id: str) -> str | None:
+    """Load generated caption for a specific text_id."""
+    json_path = AUDIO_CAPTIONS_DIR / dataset / f"{text_id}.json"
+    if not json_path.exists():
+        return None
+
+    with open(json_path) as f:
+        data = json.load(f)
+        return data.get("caption")
+
+
 def get_separated_audio_files(dataset: str, text_id: str) -> list[Path]:
     """Get list of separated audio files for a specific text_id."""
     audio_dir = SEPARATED_AUDIO_DIR / dataset / text_id
@@ -723,6 +744,7 @@ def index():
     metadata = get_metadata(dataset)
     item_meta = metadata.get(current_text_id, {})
     parsed_text = load_parsed_text(dataset, current_text_id)
+    generated_caption = load_generated_caption(dataset, current_text_id)
     separated_files = get_separated_audio_files(dataset, current_text_id)
 
     # Check if audio exists
@@ -754,6 +776,7 @@ def index():
         original_text=item_meta.get("text"),
         metadata=item_meta,
         parsed_text=parsed_text,
+        generated_caption=generated_caption,
         audio_exists=audio_exists,
         audio_path=audio_path,
         separated_audio=separated_audio,
