@@ -960,8 +960,8 @@ def embed_parsed_data(
 
 
 def create_diff_audio(dataloader, feats_dir: str):
-    """Parse audio using SAM-Audio based on parsed text sources"""
-    for batch in tqdm(dataloader, desc="Parsing Audio with SAM-Audio"):
+    """Create diff audio by subtracting separated audio from original audio."""
+    for batch in tqdm(dataloader, desc="Creating Diff Audio"):
         audio_files = batch["audio_file_path"]
         text_ids = batch["text_id"]
         datasets = batch["dataset"]
@@ -1157,10 +1157,10 @@ def main(args):
     # embed_parsed_data(dataloader, args.feats_dir, embed_model="msclap")
     # clear_gpu_memory()
     # embed_parsed_data(dataloader, args.feats_dir, embed_model="laionclap")
-    # create_diff_audio(dataloader, args.feats_dir)
-    audio_captioning(dataloader, args.feats_dir)
-    clear_gpu_memory()
-    caption_embedding(dataloader, args.feats_dir, embed_model="qwen3")
+    create_diff_audio(dataloader, args.feats_dir)
+    # audio_captioning(dataloader, args.feats_dir)
+    # clear_gpu_memory()
+    # caption_embedding(dataloader, args.feats_dir, embed_model="qwen3")
 
 
 ### argument parser ###
