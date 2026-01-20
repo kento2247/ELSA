@@ -467,23 +467,38 @@ class AudioCaptionModel:
             audio = resampler(audio)
         return audio.numpy()
 
-    def audio2text(self, audio_file_path: str) -> str:
+    def audio2text(self, audio_file_path_list: list[str]) -> list[str]:
         """Generate caption for an audio file."""
-        audio_array = self._load_audio(audio_file_path)
-
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": self.user_prompt},
-                    {"type": "audio", "audio": audio_array},
-                ],
-            },
+        audio_array = [
+            self._load_audio(audio_file_path)
+            for audio_file_path in audio_file_path_list
         ]
+
+        # messages = [
+        #     {
+        #         "role": "user",
+        #         "content": [
+        #             {"type": "text", "text": self.user_prompt},
+        #             {"type": "audio", "audio": audio_array},
+        #         ],
+        #     },
+        # ]
+        messages_batch = []
+        for audio in audio_array:
+            messages = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": self.user_prompt},
+                        {"type": "audio", "audio": audio},
+                    ],
+                }
+            ]
+            messages_batch.append(messages)
 
         with torch.no_grad():
             model_inputs = self.processor.apply_chat_template(
-                messages,
+                messages_batch,
                 tokenize=True,
                 add_generation_prompt=True,
                 add_special_tokens=True,
@@ -492,7 +507,7 @@ class AudioCaptionModel:
             generation = self.model.generate(**model_inputs)
             output = self.tokenizer.batch_decode(generation, skip_special_tokens=True)
 
-        return output[0]
+        return output
 
 
 class Qwen3Embedder:
@@ -1033,16 +1048,25 @@ def audio_captioning(dataloader, feats_dir: str):
         text_ids = batch["text_id"]
         datasets = batch["dataset"]
 
+        target_audio_files: list[str] = []
+        save_path_list: list[str] = []
         for audio_file, text_id, dataset in zip(audio_files, text_ids, datasets):
             save_path = os.path.join(
                 feats_dir, "audio_captions", dataset, f"{text_id}.json"
             )
-
             if os.path.exists(save_path):
                 continue
+            target_audio_files.append(audio_file)
+            save_path_list.append(save_path)
 
-            caption = caption_model.audio2text(audio_file)
+        if len(target_audio_files) == 0:
+            continue
 
+        captions: list[str] = caption_model.audio2text(target_audio_files)
+
+        for audio_file, save_path, caption in zip(
+            target_audio_files, save_path_list, captions
+        ):
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
             with open(save_path, "w") as f:
                 json.dump({"caption": caption}, f, ensure_ascii=False, indent=0)
