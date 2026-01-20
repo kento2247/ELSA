@@ -473,16 +473,6 @@ class AudioCaptionModel:
             self._load_audio(audio_file_path)
             for audio_file_path in audio_file_path_list
         ]
-
-        # messages = [
-        #     {
-        #         "role": "user",
-        #         "content": [
-        #             {"type": "text", "text": self.user_prompt},
-        #             {"type": "audio", "audio": audio_array},
-        #         ],
-        #     },
-        # ]
         messages_batch = []
         for audio in audio_array:
             messages = [
@@ -522,7 +512,7 @@ class Qwen3Embedder:
         self.tokenizer = AutoTokenizer.from_pretrained(model_name, padding_side="left")
         self.model = AutoModel.from_pretrained(
             model_name,
-            attn_implementation="flash_attention_2",
+            attn_implementation="sdpa",
             torch_dtype=torch.float16,
         ).to(self.device)
         self.model.eval()
@@ -1063,6 +1053,11 @@ def audio_captioning(dataloader, feats_dir: str):
             continue
 
         captions: list[str] = caption_model.audio2text(target_audio_files)
+
+        if len(captions) != len(target_audio_files):
+            raise RuntimeError(
+                "Number of captions does not match number of audio files."
+            )
 
         for audio_file, save_path, caption in zip(
             target_audio_files, save_path_list, captions
