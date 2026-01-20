@@ -853,10 +853,29 @@ def embed_parsed_data(
         datasets = batch["dataset"]
 
         for text_id, dataset in zip(text_ids, datasets):
+            # Check if all embeddings already exist
+            audio_save_path = os.path.join(
+                feats_dir, f"{feats_prefix}_parsed_audio", dataset, f"{text_id}.pt"
+            )
+            text_save_path = os.path.join(
+                feats_dir, f"{feats_prefix}_parsed_text", dataset, f"{text_id}.pt"
+            )
+            mask_save_path = os.path.join(
+                feats_dir, "parsed_mask", dataset, f"{text_id}.pt"
+            )
+            if (
+                os.path.exists(audio_save_path)
+                and os.path.exists(text_save_path)
+                and os.path.exists(mask_save_path)
+            ):
+                continue
+
             # Load parsed audio sources
             text_path = os.path.join(
                 feats_dir, "parsed_texts", dataset, f"{text_id}.json"
             )
+            if not os.path.exists(text_path):
+                continue
             with open(text_path, "r") as f:
                 audio_sources: list[str] = json.load(f)
 
