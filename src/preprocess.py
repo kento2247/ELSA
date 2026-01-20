@@ -1045,7 +1045,7 @@ def audio_captioning(dataloader, feats_dir: str):
 
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
             with open(save_path, "w") as f:
-                json.dump({"caption": caption}, f, ensure_ascii=False, indent=1)
+                json.dump({"caption": caption}, f, ensure_ascii=False, indent=0)
 
 
 def caption_embedding(dataloader, feats_dir: str, embed_model: str = "qwen3"):
