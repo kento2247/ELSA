@@ -97,7 +97,7 @@ class TTAEvalModel(nn.Module):
 
         # For samples with all-zero masks, use only cogr
         has_valid_mask = mask.any(dim=-1)  # [B]
-        combined_score = (cogr + figr_f1) / 2.0
+        combined_score = cogr * 0.2 + figr_f1 * 0.8
         score = torch.where(has_valid_mask, combined_score, cogr)
 
         return score

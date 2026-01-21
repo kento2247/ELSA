@@ -358,7 +358,6 @@ def parse_args():
     parser.add_argument(
         "--log_wandb",
         action="store_true",
-        default=True,
         help="Whether to log training with Weights & Biases",
     )
     parser.add_argument(
