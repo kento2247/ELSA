@@ -167,11 +167,12 @@ class TTAEval:
             for batch in tqdm(data_loader, desc=desc):
                 audio_file_path = batch["audio_file_path"]
                 msclap_audio = batch["msclap_audio"].to(self.device)
+                msclap_text = batch["msclap_text"].to(self.device)
                 pam_prompt_1 = batch["pam_prompt_1"].to(self.device)
                 pam_prompt_2 = batch["pam_prompt_2"].to(self.device)
                 scores = batch["score"].numpy()
                 preds = (
-                    self.model(msclap_audio, pam_prompt_1, pam_prompt_2)
+                    self.model(msclap_audio, msclap_text, pam_prompt_1, pam_prompt_2)
                     .squeeze(-1)
                     .cpu()
                     .numpy()
