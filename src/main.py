@@ -39,6 +39,18 @@ class TTAEval:
         # logging
         log_wandb: bool,
         save_qualitative: bool,
+        # model hyperparameters
+        sigma: float = 0.15,
+        # REL feature flags
+        rel_gaussian: bool = True,
+        rel_adaptive: bool = True,
+        rel_contrastive: bool = True,
+        rel_cogr_norm: bool = True,
+        # OVL feature flags
+        ovl_gaussian: bool = False,
+        ovl_adaptive: bool = False,
+        ovl_contrastive: bool = True,
+        ovl_cogr_norm: bool = True,
     ):
         """Initialize TTAEval with training and evaluation parameters."""
         # paths
@@ -58,7 +70,20 @@ class TTAEval:
         self.save_qualitative = save_qualitative
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model = TTAEvalModel().to(self.device)
+        self.model = TTAEvalModel(
+            sigma=sigma,
+            rel_use_gaussian_calibration=rel_gaussian,
+            rel_use_adaptive_fusion=rel_adaptive,
+            rel_use_contrastive=rel_contrastive,
+            rel_use_cogr_norm=rel_cogr_norm,
+            ovl_use_gaussian_calibration=ovl_gaussian,
+            ovl_use_adaptive_fusion=ovl_adaptive,
+            ovl_use_contrastive=ovl_contrastive,
+            ovl_use_cogr_norm=ovl_cogr_norm,
+        ).to(self.device)
+
+        # Load quality prompts for PAM-style quality scoring
+        self._load_quality_prompts()
 
         self.meta_data = {
             "timestamp": time.strftime("%Y%m%d-%H%M%S"),
@@ -76,6 +101,33 @@ class TTAEval:
         if isinstance(value, torch.Tensor):
             return value.to(self.device)
         return None
+
+    def _load_quality_prompts(self):
+        """Load precomputed quality and contrast prompt embeddings."""
+        feats_dir = os.path.join(self.data_dir, "features", "quality_prompts")
+        high_path = os.path.join(feats_dir, "high.pt")
+        low_path = os.path.join(feats_dir, "low.pt")
+        unrelated_path = os.path.join(feats_dir, "unrelated.pt")
+
+        if os.path.exists(high_path) and os.path.exists(low_path):
+            high_emb = torch.load(high_path, map_location=self.device)
+            low_emb = torch.load(low_path, map_location=self.device)
+
+            # Load unrelated prompt for contrastive scoring (optional)
+            unrelated_emb = None
+            if os.path.exists(unrelated_path):
+                unrelated_emb = torch.load(unrelated_path, map_location=self.device)
+                print(f"Loaded quality + contrast prompts from {feats_dir}")
+            else:
+                print(f"Loaded quality prompts from {feats_dir} (no contrast prompt)")
+
+            self.model.load_quality_prompts(high_emb, low_emb, unrelated_emb)
+        else:
+            print(
+                f"Quality prompts not found at {feats_dir}. "
+                "Run 'uv run src/preprocess.py --quality_prompts' to generate them. "
+                "REL and OVL will produce identical predictions until quality prompts are loaded."
+            )
 
     def train(self):
         """Train the model with periodic evaluation on val and test sets."""
@@ -145,10 +197,29 @@ class TTAEval:
         num_batches = 0
 
         for batch in tqdm(train_loader, desc=f"Training Epoch {epoch}"):
-            ...  # Load batch data to device
+            clap_audio = batch["humanclap_audio"].to(self.device)
+            clap_text = batch["humanclap_text"].to(self.device)
+            clap_parsed_audio = self._maybe_to_device(
+                batch.get("humanclap_parsed_audio")
+            )
+            clap_parsed_text = self._maybe_to_device(
+                batch.get("humanclap_parsed_text")
+            )
+            parsed_mask = self._maybe_to_device(batch.get("parsed_mask"))
+            metric_id = batch.get("subjective_metric_id")
+            if metric_id is not None:
+                metric_id = metric_id.to(self.device)
             scores = batch["score"].float().to(self.device)
+
             self.optimizer.zero_grad()
-            preds = self.model(...).squeeze(-1)
+            preds = self.model(
+                clap_audio,
+                clap_text,
+                clap_parsed_audio,
+                clap_parsed_text,
+                parsed_mask,
+                metric_id,
+            ).squeeze(-1)
             loss = self.criterion(preds, scores)
             loss.backward()
             self.optimizer.step()
@@ -176,6 +247,9 @@ class TTAEval:
                     batch.get("humanclap_parsed_text")
                 )
                 parsed_mask = self._maybe_to_device(batch.get("parsed_mask"))
+                metric_id = batch.get("subjective_metric_id")
+                if metric_id is not None:
+                    metric_id = metric_id.to(self.device)
                 scores = batch["score"].numpy()
                 audio_file_path = batch["audio_file_path"]
 
@@ -186,6 +260,7 @@ class TTAEval:
                         clap_parsed_audio,
                         clap_parsed_text,
                         parsed_mask,
+                        metric_id,
                     )
                     .squeeze(-1)
                     .cpu()
@@ -357,6 +432,70 @@ def parse_args():
         default=42,
         help="Seed for random number generator",
     )
+    parser.add_argument(
+        "--sigma",
+        type=float,
+        default=0.15,
+        help="Sigma for Gaussian prior calibration",
+    )
+    # REL feature flags
+    parser.add_argument(
+        "--rel_gaussian", action="store_true", default=True,
+        help="REL: use Gaussian calibration (default: True)",
+    )
+    parser.add_argument(
+        "--no_rel_gaussian", action="store_false", dest="rel_gaussian",
+        help="REL: disable Gaussian calibration",
+    )
+    parser.add_argument(
+        "--rel_adaptive", action="store_true", default=True,
+        help="REL: use adaptive fusion (default: True)",
+    )
+    parser.add_argument(
+        "--no_rel_adaptive", action="store_false", dest="rel_adaptive",
+        help="REL: disable adaptive fusion",
+    )
+    parser.add_argument(
+        "--rel_contrastive", action="store_true", default=True,
+        help="REL: use contrastive scoring (default: True)",
+    )
+    parser.add_argument(
+        "--no_rel_contrastive", action="store_false", dest="rel_contrastive",
+        help="REL: disable contrastive scoring",
+    )
+    parser.add_argument(
+        "--rel_cogr_norm", action="store_true", default=True,
+        help="REL: normalize COGR to [0,1] (default: True)",
+    )
+    parser.add_argument(
+        "--no_rel_cogr_norm", action="store_false", dest="rel_cogr_norm",
+        help="REL: disable COGR normalization",
+    )
+    # OVL feature flags
+    parser.add_argument(
+        "--ovl_gaussian", action="store_true", default=False,
+        help="OVL: use Gaussian calibration (default: False)",
+    )
+    parser.add_argument(
+        "--ovl_adaptive", action="store_true", default=False,
+        help="OVL: use adaptive fusion (default: False)",
+    )
+    parser.add_argument(
+        "--ovl_contrastive", action="store_true", default=True,
+        help="OVL: use contrastive scoring (default: True)",
+    )
+    parser.add_argument(
+        "--no_ovl_contrastive", action="store_false", dest="ovl_contrastive",
+        help="OVL: disable contrastive scoring",
+    )
+    parser.add_argument(
+        "--ovl_cogr_norm", action="store_true", default=True,
+        help="OVL: normalize COGR to [0,1] (default: True)",
+    )
+    parser.add_argument(
+        "--no_ovl_cogr_norm", action="store_false", dest="ovl_cogr_norm",
+        help="OVL: disable COGR normalization",
+    )
     return parser.parse_args()
 
 
@@ -379,6 +518,18 @@ if __name__ == "__main__":
         # logging
         log_wandb=args.log_wandb,
         save_qualitative=args.save_qualitative,
+        # model hyperparameters
+        sigma=args.sigma,
+        # REL feature flags
+        rel_gaussian=args.rel_gaussian,
+        rel_adaptive=args.rel_adaptive,
+        rel_contrastive=args.rel_contrastive,
+        rel_cogr_norm=args.rel_cogr_norm,
+        # OVL feature flags
+        ovl_gaussian=args.ovl_gaussian,
+        ovl_adaptive=args.ovl_adaptive,
+        ovl_contrastive=args.ovl_contrastive,
+        ovl_cogr_norm=args.ovl_cogr_norm,
     )
 
     if args.mode == "train":
