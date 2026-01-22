@@ -4,12 +4,8 @@ import torch.nn.functional as F
 
 
 class TTAEvalModel(nn.Module):
-    def __init__(
-        self,
-        embedding_dim: int = 512,
-    ):
+    def __init__(self):
         super().__init__()
-        self.embedding_dim = embedding_dim
 
     def _greedy_matching(
         self,

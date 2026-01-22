@@ -145,24 +145,10 @@ class TTAEval:
         num_batches = 0
 
         for batch in tqdm(train_loader, desc=f"Training Epoch {epoch}"):
-            laionclap_audio = batch["laionclap_audio"].to(self.device)
-            laionclap_text = batch["laionclap_text"].to(self.device)
-            laionclap_parsed_audio = self._maybe_to_device(
-                batch.get("laionclap_parsed_audio")
-            )
-            laionclap_parsed_text = self._maybe_to_device(
-                batch.get("laionclap_parsed_text")
-            )
-            parsed_mask = self._maybe_to_device(batch.get("parsed_mask"))
+            ...  # Load batch data to device
             scores = batch["score"].float().to(self.device)
             self.optimizer.zero_grad()
-            preds = self.model(
-                laionclap_audio,
-                laionclap_text,
-                laionclap_parsed_audio,
-                laionclap_parsed_text,
-                parsed_mask,
-            ).squeeze(-1)
+            preds = self.model(...).squeeze(-1)
             loss = self.criterion(preds, scores)
             loss.backward()
             self.optimizer.step()
