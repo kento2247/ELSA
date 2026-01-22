@@ -90,7 +90,7 @@ class CLAPEmbedder(ABC):
         """
         raise NotImplementedError
 
-    def embed_audios(self, audio_files: list[str]) -> torch.Tensor:
+    def embed_audios(self, audio_files: list[str] | list[torch.Tensor]) -> torch.Tensor:
         """Embed audios in batch.
 
         Args:
@@ -150,17 +150,21 @@ class MSClapEmbedder(CLAPEmbedder):
             text_embeddings = self.model.get_text_embeddings(truncated_texts)
         return text_embeddings.to(self.dtype)
 
-    def embed_audios(self, audio_files: list[str]) -> torch.Tensor:
+    def embed_audios(self, audio_files: list[str] | list[torch.Tensor]) -> torch.Tensor:
         """Embed audios in batch.
 
         Args:
-            audio_files: List of audio file paths.
+            audio_files: List of audio file paths or tensor.
 
         Returns:
             Audio embeddings tensor of shape [B, D].
         """
         fix_seed(self.seed)  # Ensure seed is fixed before audio embedding
         with torch.no_grad():
+            if isinstance(audio_files[0], torch.Tensor):
+                raise NotImplementedError(
+                    "MS-CLAP embedder does not support audio tensors."
+                )
             audio_embeddings = self.model.get_audio_embeddings(audio_files)
         return audio_embeddings.to(self.dtype)
 
@@ -197,16 +201,20 @@ class LaionClapEmbedder(CLAPEmbedder):
             )
         return text_embeddings.to(self.dtype)
 
-    def embed_audios(self, audio_files: list[str]) -> torch.Tensor:
+    def embed_audios(self, audio_files: list[str] | list[torch.Tensor]) -> torch.Tensor:
         """Embed audios in batch.
 
         Args:
-            audio_files: List of audio file paths.
+            audio_files: List of audio file paths or tensor.
 
         Returns:
             Audio embeddings tensor of shape [B, D].
         """
         with torch.no_grad():
+            if isinstance(audio_files[0], torch.Tensor):
+                raise NotImplementedError(
+                    "LAION-CLAP embedder does not support audio tensors."
+                )
             audio_embeddings = self.model.get_audio_embedding_from_filelist(
                 x=audio_files, use_tensor=True
             )
@@ -250,11 +258,25 @@ class HumanCLAPEmbedder(CLAPEmbedder):
             audio = resampler(audio)
         return audio.detach().numpy().copy()
 
+    def resample_audio(self, audio: torch.Tensor, orig_sr: int) -> torch.Tensor:
+        """Resample audio tensor to target sample rate.
+
+        Args:
+            audio: Audio tensor.
+
+        Returns:
+            Resampled audio tensor.
+        """
+        if orig_sr == self.target_sr:
+            return audio
+        resampler = torchaudio.transforms.Resample(orig_sr, self.target_sr)
+        return resampler(audio)
+
     def embed_texts(self, texts: list[str]) -> torch.Tensor:
         """Embed texts in batch with truncation for long texts.
 
         Args:
-            texts: List of text strings to embed.
+            texts: List of text strings or tensor to embed.
 
         Returns:
             Text embeddings tensor of shape [B, D].
@@ -270,7 +292,7 @@ class HumanCLAPEmbedder(CLAPEmbedder):
             text_embeddings = self.model.get_text_features(**inputs)
         return text_embeddings.to(self.dtype)
 
-    def embed_audios(self, audio_files: list[str]) -> torch.Tensor:
+    def embed_audios(self, audio_files: list[str] | list[torch.Tensor]) -> torch.Tensor:
         """Embed audios in batch.
 
         Args:
@@ -279,7 +301,13 @@ class HumanCLAPEmbedder(CLAPEmbedder):
         Returns:
             Audio embeddings tensor of shape [B, D].
         """
-        audios = [self._load_audio(f) for f in audio_files]
+        if isinstance(audio_files[0], torch.Tensor):
+            audios = [
+                audio_file.detach().cpu().float().numpy().copy()
+                for audio_file in audio_files
+            ]
+        else:
+            audios = [self._load_audio(f) for f in audio_files]
         with torch.no_grad():
             inputs = self.processor(
                 audios=audios,
