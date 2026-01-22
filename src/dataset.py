@@ -11,7 +11,8 @@ from tqdm import tqdm
 class TTADataset(Dataset):
     def __init__(
         self,
-        data_dir: str,
+        data_dir: str = "data",
+        features_dir: str = "features",
         subjective_metrics: list[Literal["REL", "OVL"]] = ["REL", "OVL"],
         dataset_names: list[
             Literal["relate", "audiocap", "musiccap", "xacle", "aishell7b", "clotho"]
@@ -31,6 +32,7 @@ class TTADataset(Dataset):
     ):
         """Initialize TTADataset with specified data directory and split."""
         self.data_dir = data_dir
+        self.features_dir = features_dir
         self.bitrate = bitrate
         self.max_len = max_len
         self.dtype = dtype
@@ -375,7 +377,7 @@ class TTADataset(Dataset):
         self, feats_name: str, dataset_name: str, file_name: str, dim: int = None
     ) -> torch.Tensor:
         """Load pre-extracted features from the specified file path."""
-        feats_dir = os.path.join(self.data_dir, "features", feats_name)
+        feats_dir = os.path.join(self.data_dir, self.features_dir, feats_name)
         feat_path = os.path.join(feats_dir, dataset_name, file_name)
         if not os.path.exists(feat_path):
             return torch.empty(0, dim)
@@ -386,7 +388,7 @@ class TTADataset(Dataset):
         self, feats_name: str, dataset_name: str, file_name: str
     ) -> torch.Tensor:
         """Load pre-extracted mask without dtype casting."""
-        feats_dir = os.path.join(self.data_dir, "features", feats_name)
+        feats_dir = os.path.join(self.data_dir, self.features_dir, feats_name)
         feat_path = os.path.join(feats_dir, dataset_name, file_name)
         if not os.path.exists(feat_path):
             return torch.empty(0, dtype=torch.bool)

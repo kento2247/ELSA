@@ -27,6 +27,7 @@ class TTAEval:
         # paths
         data_dir: str,
         model_dir: str,
+        features_dir: str,
         # training params
         batch_size: int,
         lr: float,
@@ -43,6 +44,7 @@ class TTAEval:
         """Initialize TTAEval with training and evaluation parameters."""
         # paths
         self.data_dir = data_dir
+        self.features_dir = features_dir
         self.model_dir = model_dir
         # training params
         self.batch_size = batch_size
@@ -220,6 +222,7 @@ class TTAEval:
             for test_dataset_name in self.test_dataset_names:
                 test_dataset = TTADataset(
                     data_dir=self.data_dir,
+                    features_dir=self.features_dir,
                     split="test",
                     dataset_names=[test_dataset_name],
                     subjective_metrics=[subjective_metric],
@@ -305,6 +308,12 @@ def parse_args():
         help="Directory containing the dataset",
     )
     parser.add_argument(
+        "--features_dir",
+        type=str,
+        default="features",
+        help="Directory containing the precomputed features",
+    )
+    parser.add_argument(
         "--model_dir",
         type=str,
         default="models",
@@ -366,6 +375,7 @@ if __name__ == "__main__":
     evaluator = TTAEval(
         # paths
         data_dir=args.data_dir,
+        features_dir=args.features_dir,
         model_dir=args.model_dir,
         # training params
         batch_size=args.batch_size,
