@@ -18,7 +18,7 @@ uv sync
 ### 動作環境
 - Python 3.10.0
 - CUDA 11.8（GPU使用時）
-- VRAM 24GB (RTX4090推奨)
+- VRAM 12GB (Text ParserにQwenを使用する場合は20GB)
 
 ## データセットのダウンロード
 

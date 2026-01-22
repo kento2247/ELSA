@@ -41,26 +41,23 @@ class TTAEval:
         log_wandb: bool,
         save_qualitative: bool,
     ):
-        """Initialize TTAEval with training and evaluation parameters."""
-        # paths
         self.data_dir = data_dir
         self.features_dir = features_dir
         self.model_dir = model_dir
-        # training params
         self.batch_size = batch_size
         self.lr = lr
         self.epochs = epochs
         self.eval_freq = eval_freq
         self.main_metric = main_metric
-        # evaluation params
         self.subjective_metrics = subjective_metrics
         self.test_dataset_names = test_dataset_names
-        # logging
         self.log_wandb = log_wandb
         self.save_qualitative = save_qualitative
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = TTAEvalModel().to(self.device)
+
+        self._load_quality_prompts()
 
         self.meta_data = {
             "timestamp": time.strftime("%Y%m%d-%H%M%S"),
@@ -78,6 +75,31 @@ class TTAEval:
         if isinstance(value, torch.Tensor):
             return value.to(self.device)
         return None
+
+    def _load_quality_prompts(self):
+        feats_dir = os.path.join(self.data_dir, "features", "quality_prompts")
+        high_path = os.path.join(feats_dir, "high.pt")
+        low_path = os.path.join(feats_dir, "low.pt")
+        unrelated_path = os.path.join(feats_dir, "unrelated.pt")
+
+        if os.path.exists(high_path) and os.path.exists(low_path):
+            high_emb = torch.load(high_path, map_location=self.device)
+            low_emb = torch.load(low_path, map_location=self.device)
+
+            unrelated_emb = None
+            if os.path.exists(unrelated_path):
+                unrelated_emb = torch.load(unrelated_path, map_location=self.device)
+                print(f"Loaded quality + contrast prompts from {feats_dir}")
+            else:
+                print(f"Loaded quality prompts from {feats_dir} (no contrast prompt)")
+
+            self.model.load_quality_prompts(high_emb, low_emb, unrelated_emb)
+        else:
+            print(
+                f"Quality prompts not found at {feats_dir}. "
+                "Run 'uv run src/preprocess.py --quality_prompts' to generate them. "
+                "REL and OVL will produce identical predictions until quality prompts are loaded."
+            )
 
     def train(self):
         """Train the model with periodic evaluation on val and test sets."""
@@ -147,10 +169,29 @@ class TTAEval:
         num_batches = 0
 
         for batch in tqdm(train_loader, desc=f"Training Epoch {epoch}"):
-            ...  # Load batch data to device
+            clap_audio = batch["humanclap_audio"].to(self.device)
+            clap_text = batch["humanclap_text"].to(self.device)
+            clap_parsed_audio = self._maybe_to_device(
+                batch.get("humanclap_parsed_audio")
+            )
+            clap_parsed_text = self._maybe_to_device(
+                batch.get("humanclap_parsed_text")
+            )
+            parsed_mask = self._maybe_to_device(batch.get("parsed_mask"))
+            metric_id = batch.get("subjective_metric_id")
+            if metric_id is not None:
+                metric_id = metric_id.to(self.device)
             scores = batch["score"].float().to(self.device)
+
             self.optimizer.zero_grad()
-            preds = self.model(...).squeeze(-1)
+            preds = self.model(
+                clap_audio,
+                clap_text,
+                clap_parsed_audio,
+                clap_parsed_text,
+                parsed_mask,
+                metric_id,
+            ).squeeze(-1)
             loss = self.criterion(preds, scores)
             loss.backward()
             self.optimizer.step()
@@ -178,6 +219,9 @@ class TTAEval:
                     batch.get("humanclap_parsed_text")
                 )
                 parsed_mask = self._maybe_to_device(batch.get("parsed_mask"))
+                metric_id = batch.get("subjective_metric_id")
+                if metric_id is not None:
+                    metric_id = metric_id.to(self.device)
                 scores = batch["score"].numpy()
                 audio_file_path = batch["audio_file_path"]
 
@@ -188,6 +232,7 @@ class TTAEval:
                         clap_parsed_audio,
                         clap_parsed_text,
                         parsed_mask,
+                        metric_id,
                     )
                     .squeeze(-1)
                     .cpu()
@@ -373,20 +418,16 @@ if __name__ == "__main__":
     args = parse_args()
     fix_seed(args.seed)
     evaluator = TTAEval(
-        # paths
         data_dir=args.data_dir,
         features_dir=args.features_dir,
         model_dir=args.model_dir,
-        # training params
         batch_size=args.batch_size,
         lr=args.lr,
         epochs=args.epochs,
         eval_freq=args.eval_freq,
         main_metric=args.main_metric,
-        # evaluation params
         subjective_metrics=args.subjective_metrics,
         test_dataset_names=args.test_dataset_names,
-        # logging
         log_wandb=args.log_wandb,
         save_qualitative=args.save_qualitative,
     )

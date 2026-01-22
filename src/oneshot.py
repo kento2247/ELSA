@@ -1,3 +1,5 @@
+from typing import Literal
+
 import torch
 
 from model import TTAEvalModel
@@ -10,8 +12,15 @@ class OneShotTTAEvalModel(TTAEvalModel):
         self.embedder = HumanCLAPEmbedder()
         self.text_parser = GPTTextParser()
         self.audio_parser = SamAudio()
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.to(self.device)
 
-    def forward(self, audio_file_path: str, text: str) -> torch.Tensor:
+    def forward(
+        self,
+        audio_file_path: str,
+        text: str,
+        metric: Literal["REL", "OVL"] = "REL",
+    ) -> torch.Tensor:
         audio_feature: torch.Tensor = self.embedder.embed_audios(
             [audio_file_path]
         )  # [1, D]
@@ -36,6 +45,7 @@ class OneShotTTAEvalModel(TTAEvalModel):
             separated_audios_features.unsqueeze(0),  # [1, num_events, D]
             acoustic_events_features.unsqueeze(0),  # [1, num_events, D]
             mask,  # [1, num_events]
+            (torch.tensor(1.0 if metric == "OVL" else 0.0).to(self.device)),  # [1]
         )  # [1]
         return score.squeeze(0)  # []
 
@@ -48,6 +58,7 @@ if __name__ == "__main__":
     score = model(
         audio_file_path="data/wav/tango/train/23.wav",
         text="A dog barking and a car honking.",
+        metric="REL",
     )
     print("Predicted score:", score.item())
     end_time = time.time()

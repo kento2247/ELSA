@@ -835,6 +835,54 @@ def clear_gpu_memory():
     torch.cuda.empty_cache()
 
 
+### Quality prompt embeddings ###
+
+QUALITY_PROMPTS = {
+    "high": "the sound is clear and clean",
+    "low": "the sound is noisy and with artifacts",
+}
+
+# Negative/unrelated prompt for contrastive REL scoring (DISCODE-inspired)
+CONTRAST_PROMPTS = {
+    "unrelated": "silence with no sound events",
+}
+
+
+def embed_quality_prompts(feats_dir: str, embedder: CLAPEmbedder):
+    """Embed PAM-style quality prompts and contrast prompts, save to disk.
+
+    Args:
+        feats_dir: Directory to save the quality prompt embeddings.
+        embedder: CLAP embedder instance to use for text embedding.
+    """
+    save_dir = os.path.join(feats_dir, "quality_prompts")
+    os.makedirs(save_dir, exist_ok=True)
+
+    # Embed quality prompts (high/low)
+    for quality_level, prompt in QUALITY_PROMPTS.items():
+        save_path = os.path.join(save_dir, f"{quality_level}.pt")
+        if os.path.exists(save_path):
+            print(f"Quality prompt '{quality_level}' already exists at {save_path}")
+            continue
+
+        with torch.no_grad():
+            embedding = embedder.embed_texts([prompt])  # [1, D]
+        torch.save(embedding.squeeze(0), save_path)  # [D]
+        print(f"Saved quality prompt '{quality_level}' to {save_path}")
+
+    # Embed contrast prompts (unrelated) for DISCODE-style contrastive scoring
+    for contrast_type, prompt in CONTRAST_PROMPTS.items():
+        save_path = os.path.join(save_dir, f"{contrast_type}.pt")
+        if os.path.exists(save_path):
+            print(f"Contrast prompt '{contrast_type}' already exists at {save_path}")
+            continue
+
+        with torch.no_grad():
+            embedding = embedder.embed_texts([prompt])  # [1, D]
+        torch.save(embedding.squeeze(0), save_path)  # [D]
+        print(f"Saved contrast prompt '{contrast_type}' to {save_path}")
+
+
 ### feature extraction main ###
 
 
@@ -1172,18 +1220,24 @@ def main(args):
     Args:
         args: Parsed command-line arguments.
     """
+    embedder_model = args.clap_model
+
+    if embedder_model == "humanclap":
+        embedder = HumanCLAPEmbedder()
+    elif embedder_model == "laionclap":
+        embedder = LaionClapEmbedder()
+    elif embedder_model == "msclap":
+        embedder = MSClapEmbedder(seed=args.seed)
+
+    # If only embedding quality prompts, do that and exit
+    if args.quality_prompts:
+        embed_quality_prompts(args.feats_dir, embedder)
+        return
+
     for split in args.splits:
         dataset = TTAPreprocessDataset(data_dir=args.data_dir, split=split)
         dataloader = DataLoader(dataset, batch_size=args.bs, shuffle=False)
-        embedder_model = args.clap_model
         llm_model = args.llm_model
-
-        if embedder_model == "humanclap":
-            embedder = HumanCLAPEmbedder()
-        elif embedder_model == "laionclap":
-            embedder = LaionClapEmbedder()
-        elif embedder_model == "msclap":
-            embedder = MSClapEmbedder(seed=args.seed)
 
         if llm_model == "gemini":
             text_parser = GeminiTextParser()
@@ -1259,6 +1313,11 @@ def arg_parser():
         type=str,
         default="gpt",
         help="LLM model to use for text parsing (gemini/gpt/qwen)",
+    )
+    parser.add_argument(
+        "--quality_prompts",
+        action="store_true",
+        help="Only embed quality prompts (skip other preprocessing)",
     )
     args = parser.parse_args()
     return args
