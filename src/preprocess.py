@@ -999,6 +999,7 @@ def audio_parse(dataloader, feats_dir: str, text_parser_name: str):
         feats_dir: Directory containing parsed texts and for saving separated audio.
     """
     sam_audio = SamAudio()
+    max_chunk_sec = 20
     for batch in tqdm(dataloader, desc="Parsing Audio with SAM-Audio"):
         audio_files = batch["audio_file_path"]
         text_ids = batch["text_id"]
@@ -1017,19 +1018,70 @@ def audio_parse(dataloader, feats_dir: str, text_parser_name: str):
             save_dir = os.path.join(feats_dir, "separated_audio", dataset, text_id)
             os.makedirs(save_dir, exist_ok=True)
 
-            if len(os.listdir(save_dir)) == len(audio_sources):
+            existing_wavs = [
+                f for f in os.listdir(save_dir) if f.endswith(".wav")
+            ]
+            if len(existing_wavs) == len(audio_sources):
+                continue
+            if len(audio_sources) == 0:
                 continue
 
-            # Split audio using SAM-Audio with automatic mixed precision
-            with torch.amp.autocast("cuda"):
-                separated_audios: list[torch.Tensor] = sam_audio.separate_audio(
-                    audio_file, audio_sources
-                )
+            audio_info = torchaudio.info(audio_file)
+            duration_sec = audio_info.num_frames / audio_info.sample_rate
 
-            # Save separated audio files
-            for i, audio_tensor in enumerate(separated_audios):
+            if duration_sec <= max_chunk_sec:
+                # Split audio using SAM-Audio with automatic mixed precision
+                with torch.amp.autocast("cuda"):
+                    separated_audios: list[torch.Tensor] = sam_audio.separate_audio(
+                        audio_file, audio_sources
+                    )
+
+                # Save separated audio files
+                for i, audio_tensor in enumerate(separated_audios):
+                    save_path = os.path.join(save_dir, f"{i}.wav")
+                    sam_audio.save_audio(save_path, audio_tensor)
+                continue
+
+            # Long audio: chunk -> SAM -> stitch per prompt
+            audio, sr = torchaudio.load(audio_file)
+            target_sr = sam_audio.processor.audio_sampling_rate
+            if sr != target_sr:
+                resampler = torchaudio.transforms.Resample(sr, target_sr)
+                audio = resampler(audio)
+                sr = target_sr
+
+            samples_per_chunk = int(sr * max_chunk_sec)
+            total_samples = audio.shape[-1]
+            chunk_dir = os.path.join(save_dir, "chunks")
+            os.makedirs(chunk_dir, exist_ok=True)
+
+            chunk_paths = []
+            for chunk_idx, start in enumerate(range(0, total_samples, samples_per_chunk)):
+                end = min(start + samples_per_chunk, total_samples)
+                if end <= start:
+                    continue
+                chunk_audio = audio[..., start:end]
+                chunk_path = os.path.join(chunk_dir, f"{chunk_idx}.wav")
+                torchaudio.save(chunk_path, chunk_audio, sr)
+                chunk_paths.append(chunk_path)
+
+            stitched: list[list[torch.Tensor]] = [[] for _ in audio_sources]
+            for chunk_path in chunk_paths:
+                with torch.amp.autocast("cuda"):
+                    chunk_separated = sam_audio.separate_audio(
+                        chunk_path, audio_sources
+                    )
+                for i, audio_tensor in enumerate(chunk_separated):
+                    if audio_tensor.dim() == 1:
+                        audio_tensor = audio_tensor.unsqueeze(0)
+                    stitched[i].append(audio_tensor.detach().cpu())
+
+            for i, parts in enumerate(stitched):
+                if len(parts) == 0:
+                    continue
+                merged = torch.cat(parts, dim=-1)
                 save_path = os.path.join(save_dir, f"{i}.wav")
-                sam_audio.save_audio(save_path, audio_tensor)
+                sam_audio.save_audio(save_path, merged)
 
 
 def embed_parsed_data(
