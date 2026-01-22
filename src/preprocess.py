@@ -335,7 +335,7 @@ class GeminiTextParser(TextParser):
     """Text parser using Google Gemini model."""
 
     def __init__(
-        self, model_name: str = "gemini-2.5-flash", cooldown_time: float = 1.0
+        self, model_name: str = "gemini-2.5-flash", cooldown_time: float = 0.1
     ):
         """Initialize GeminiTextParser.
 
