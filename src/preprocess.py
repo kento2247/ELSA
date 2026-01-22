@@ -369,7 +369,7 @@ Output: ["A large dog barks loudly", "heavy rain falls on the metal roof"]"""
                 },
             )
             sound_events = SoundEvents.model_validate_json(response.text)
-            responses.append(sound_events.events)
+            responses.append(list(set(sound_events.events)))
         return responses
 
 
@@ -442,7 +442,7 @@ class GPTTextParser(TextParser):
                 temperature=0.0,
             )
             result = response.choices[0].message.parsed.events
-            responses.append(result)
+            responses.append(list(set(result)))
         return responses
 
 
@@ -631,7 +631,7 @@ Output: """
         responses = []
         for i in range(len(chats)):
             result = self._decode_single_response(ids[i], len(inputs.input_ids[i]))
-            responses.append(result)
+            responses.append(list(set(result)))
 
         return responses
 
@@ -877,7 +877,7 @@ def text_parse(dataloader, feats_dir: str, text_parser: TextParser):
             unique_texts = [t for t, _, _ in to_parse]
             results = text_parser.parse_texts(unique_texts)
             for text, result in zip(unique_texts, results):
-                cache[text] = list(set(result))
+                cache[text] = result
 
         # Save all texts in batch
         for text, text_id, dataset in zip(texts, text_ids, datasets):
@@ -916,6 +916,9 @@ def audio_parse(dataloader, feats_dir: str):
                 audio_sources = json.load(f)
             save_dir = os.path.join(feats_dir, "separated_audio", dataset, text_id)
             os.makedirs(save_dir, exist_ok=True)
+
+            print(len(os.listdir(save_dir)), len(audio_sources))
+            input()
 
             if len(os.listdir(save_dir)) == len(audio_sources):
                 continue
