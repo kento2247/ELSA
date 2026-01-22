@@ -334,14 +334,17 @@ class SoundEvents(BaseModel):
 class GeminiTextParser(TextParser):
     """Text parser using Google Gemini model."""
 
-    def __init__(self, model_name: str = "gemini-2.5-flash"):
+    def __init__(
+        self, model_name: str = "gemini-2.5-flash", cooldown_time: float = 1.0
+    ):
         """Initialize GeminiTextParser.
 
         Args:
             model_name: Name of the Gemini model to use.
         """
         self.name = "gemini"
-        api_key = os.environ.get("GOOGLE_API_KEY")
+        self.cooldown_time = cooldown_time
+        api_key = os.environ.get("GEMINI_API_KEY")
         if api_key is None:
             api_key = input("Enter your Google API key: ")
         self.client = genai.Client(api_key=api_key)
@@ -407,6 +410,7 @@ class GeminiTextParser(TextParser):
             )
             sound_events = SoundEvents.model_validate_json(response.text)
             responses.append(list(set(sound_events.events)))
+            time.sleep(self.cooldown_time)
         return responses
 
 
