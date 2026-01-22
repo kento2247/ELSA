@@ -647,6 +647,7 @@ class SamAudio:
         """
         separated_audios = []
         for prompt in prompts:
+            prompt = prompt.lower()
             with torch.inference_mode():
                 batch = self.processor(
                     audios=[audio_file],
@@ -885,7 +886,6 @@ def audio_parse(dataloader, feats_dir: str):
             )
             with open(text_path, "r") as f:
                 audio_sources = json.load(f)
-            audio_sources = [src.lower() for src in audio_sources]
             save_dir = os.path.join(feats_dir, "separated_audio", dataset, text_id)
             os.makedirs(save_dir, exist_ok=True)
 
