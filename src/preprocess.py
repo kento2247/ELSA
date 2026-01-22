@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import re
+import time
 from abc import ABC
 from typing import List
 
@@ -9,6 +10,7 @@ import laion_clap
 import torch
 import torchaudio
 from google import genai
+from google.genai.types import GenerateContentConfig
 from msclap import CLAP
 from openai import OpenAI
 from pydantic import BaseModel, Field
@@ -344,11 +346,42 @@ class GeminiTextParser(TextParser):
             api_key = input("Enter your Google API key: ")
         self.client = genai.Client(api_key=api_key)
         self.model_name = model_name
-        self.system_prompt = """Split the caption into separate sound events. Keep all modifiers (adjectives, adverbs, descriptions).
+        self.system_prompt = (
+            "You are a text parser. Output ONLY a JSON array of strings."
+        )
 
-Example:
-Caption: A large dog barks loudly while heavy rain falls on the metal roof.
-Output: ["A large dog barks loudly", "heavy rain falls on the metal roof"]"""
+    def build_prompt(self, text: str) -> str:
+        """Build prompt from caption text.
+
+        Args:
+            text: Caption text to include in the prompt.
+
+        Returns:
+            Formatted prompt string for GPT.
+        """
+        prompt = f"""Task:
+        Identify all sound events described in the following caption.
+
+        Rules:
+        - Each element must correspond to ONE sound event.
+        - Express each sound event in a concise NP or VP form.
+        - Do NOT include duplicate or semantically overlapping sound events.
+        - Do NOT include emotional, evaluative, or subjective modifiers.
+        - If the caption describes only ONE sound event, output a JSON array with a single string.
+        - Output MUST be a valid JSON array of strings.
+
+        Example 1:
+        Caption: Birds chirp loudly in the distance; a person talks nearby; more chirping.
+        Output: ["Birds chirping loudly in the distance", "A person talking nearby"]
+
+        Example 2:
+        A male vocalist sings this spirited song. The song is medium tempo with energetic electric guitar lead enthusiastic electric bass guitar  hard hitting drums and keyboard harmony. The vocals are passionate youthfulenergetic vociferous powerful and loud . This song is Hard Rock/Metal.
+        Output: ["A male vocalist singing", "An electric guitar lead playing", "An electric bass guitar playing", "Drums playing", "A keyboard harmony playing"]
+
+        Caption: {text}
+
+        Output: """
+        return prompt
 
     def parse_texts(self, texts: list[str]) -> list[list[str]]:
         """Parse texts in batch using Gemini model.
@@ -361,15 +394,16 @@ Output: ["A large dog barks loudly", "heavy rain falls on the metal roof"]"""
         """
         responses = []
         for text in texts:
-            prompt = f"{self.system_prompt}\n\nCaption: {text}\n\nOutput:"
+            prompt = self.build_prompt(text)
             response = self.client.models.generate_content(
                 model=self.model_name,
                 contents=prompt,
-                config={
-                    "response_mime_type": "application/json",
-                    "response_json_schema": SoundEvents.model_json_schema(),
-                    "temperature": 0.0,
-                },
+                config=GenerateContentConfig(
+                    system_instruction=self.system_prompt,
+                    response_mime_type="application/json",
+                    response_json_schema=SoundEvents.model_json_schema(),
+                    temperature=0.0,
+                ),
             )
             sound_events = SoundEvents.model_validate_json(response.text)
             responses.append(list(set(sound_events.events)))
