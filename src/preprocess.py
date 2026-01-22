@@ -870,7 +870,10 @@ def text_parse(dataloader, feats_dir: str, text_parser: TextParser):
         to_parse = []
         for text, text_id, dataset in zip(texts, text_ids, datasets):
             save_path = os.path.join(
-                feats_dir, "parsed_texts", dataset, f"{text_id}.json"
+                feats_dir,
+                f"{text_parser.name}_parsed_texts",
+                dataset,
+                f"{text_id}.json",
             )
             if os.path.exists(save_path) or text in cache:
                 continue
@@ -1137,12 +1140,12 @@ def main(args):
         embedder_model = args.clap_model
         llm_model = args.llm_model
 
-        if embedder_model == "humanclap":
-            embedder = HumanCLAPEmbedder()
-        elif embedder_model == "laionclap":
-            embedder = LaionClapEmbedder()
-        elif embedder_model == "msclap":
-            embedder = MSClapEmbedder(seed=args.seed)
+        # if embedder_model == "humanclap":
+        #     embedder = HumanCLAPEmbedder()
+        # elif embedder_model == "laionclap":
+        #     embedder = LaionClapEmbedder()
+        # elif embedder_model == "msclap":
+        #     embedder = MSClapEmbedder(seed=args.seed)
 
         if llm_model == "gemini":
             text_parser = GeminiTextParser()
@@ -1151,17 +1154,17 @@ def main(args):
         elif llm_model == "qwen":
             text_parser = QwenTextParser()
 
-        clap_extract(dataloader, args.feats_dir, embedder=embedder)
-        clear_gpu_memory()
+        # clap_extract(dataloader, args.feats_dir, embedder=embedder)
+        # clear_gpu_memory()
 
         text_parse(dataloader, args.feats_dir, text_parser=text_parser)
         clear_gpu_memory()
-        audio_parse(dataloader, args.feats_dir, text_parser.name)
-        clear_gpu_memory()
-        embed_parsed_data(
-            dataloader, args.feats_dir, embedder, text_parser_name=text_parser.name
-        )
-        clear_gpu_memory()
+        # audio_parse(dataloader, args.feats_dir, text_parser.name)
+        # clear_gpu_memory()
+        # embed_parsed_data(
+        #     dataloader, args.feats_dir, embedder, text_parser_name=text_parser.name
+        # )
+        # clear_gpu_memory()
 
         # create_diff_audio(dataloader, args.feats_dir)
 
