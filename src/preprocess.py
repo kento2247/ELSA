@@ -108,6 +108,8 @@ class TextParser(ABC):
     Subclasses must implement parse_texts method to extract sound events.
     """
 
+    name: str
+
     def parse_texts(self, texts: list[str]) -> list[list[str]]:
         """Parse texts in batch and return list of sound events for each text.
 
@@ -336,6 +338,7 @@ class GeminiTextParser(TextParser):
         Args:
             model_name: Name of the Gemini model to use.
         """
+        self.name = "gemini"
         api_key = os.environ.get("GOOGLE_API_KEY")
         if api_key is None:
             api_key = input("Enter your Google API key: ")
@@ -382,6 +385,7 @@ class GPTTextParser(TextParser):
         Args:
             model_name: Name of the GPT model to use.
         """
+        self.name = "gpt"
         self.client = OpenAI()
         self.model_name = model_name
         self.system_prompt = (
@@ -455,6 +459,7 @@ class QwenTextParser(TextParser):
         Args:
             model_name: Name or path of the Qwen model to use.
         """
+        self.name = "qwen"
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.model = AutoModelForCausalLM.from_pretrained(
@@ -882,7 +887,10 @@ def text_parse(dataloader, feats_dir: str, text_parser: TextParser):
         # Save all texts in batch
         for text, text_id, dataset in zip(texts, text_ids, datasets):
             save_path = os.path.join(
-                feats_dir, "parsed_texts", dataset, f"{text_id}.json"
+                feats_dir,
+                f"{text_parser.name}_parsed_texts",
+                dataset,
+                f"{text_id}.json",
             )
             if os.path.exists(save_path):
                 continue
@@ -891,7 +899,7 @@ def text_parse(dataloader, feats_dir: str, text_parser: TextParser):
                 json.dump(cache[text], f, ensure_ascii=False, indent=0)
 
 
-def audio_parse(dataloader, feats_dir: str):
+def audio_parse(dataloader, feats_dir: str, text_parser_name: str):
     """Separate audio into individual sound sources using SAM-Audio.
 
     Uses parsed text sources as prompts to separate the original audio
@@ -910,7 +918,10 @@ def audio_parse(dataloader, feats_dir: str):
         for text_id, dataset, audio_file in zip(text_ids, datasets, audio_files):
             # Load parsed audio sources
             text_path = os.path.join(
-                feats_dir, "parsed_texts", dataset, f"{text_id}.json"
+                feats_dir,
+                f"{text_parser_name}_parsed_texts",
+                dataset,
+                f"{text_id}.json",
             )
             with open(text_path, "r") as f:
                 audio_sources = json.load(f)
@@ -937,6 +948,7 @@ def embed_parsed_data(
     feats_dir: str,
     embedder: CLAPEmbedder,
     seq_size: int = 20,
+    text_parser_name: str = "gpt",
 ):
     """
     Embed parsed audio segments and text prompts.
@@ -952,7 +964,10 @@ def embed_parsed_data(
         for text_id, dataset in zip(text_ids, datasets):
             # Load parsed audio sources
             text_path = os.path.join(
-                feats_dir, "parsed_texts", dataset, f"{text_id}.json"
+                feats_dir,
+                f"{text_parser_name}_parsed_texts",
+                dataset,
+                f"{text_id}.json",
             )
             with open(text_path, "r") as f:
                 audio_sources: list[str] = json.load(f)
@@ -1141,9 +1156,11 @@ def main(args):
 
         text_parse(dataloader, args.feats_dir, text_parser=text_parser)
         clear_gpu_memory()
-        audio_parse(dataloader, args.feats_dir)
+        audio_parse(dataloader, args.feats_dir, text_parser.name)
         clear_gpu_memory()
-        embed_parsed_data(dataloader, args.feats_dir, embedder)
+        embed_parsed_data(
+            dataloader, args.feats_dir, embedder, text_parser_name=text_parser.name
+        )
         clear_gpu_memory()
 
         # create_diff_audio(dataloader, args.feats_dir)
