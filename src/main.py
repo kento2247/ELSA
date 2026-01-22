@@ -39,50 +39,22 @@ class TTAEval:
         # logging
         log_wandb: bool,
         save_qualitative: bool,
-        # model hyperparameters
-        sigma: float = 0.15,
-        # REL feature flags
-        rel_gaussian: bool = True,
-        rel_adaptive: bool = True,
-        rel_contrastive: bool = True,
-        rel_cogr_norm: bool = True,
-        # OVL feature flags
-        ovl_gaussian: bool = False,
-        ovl_adaptive: bool = False,
-        ovl_contrastive: bool = True,
-        ovl_cogr_norm: bool = True,
     ):
-        """Initialize TTAEval with training and evaluation parameters."""
-        # paths
         self.data_dir = data_dir
         self.model_dir = model_dir
-        # training params
         self.batch_size = batch_size
         self.lr = lr
         self.epochs = epochs
         self.eval_freq = eval_freq
         self.main_metric = main_metric
-        # evaluation params
         self.subjective_metrics = subjective_metrics
         self.test_dataset_names = test_dataset_names
-        # logging
         self.log_wandb = log_wandb
         self.save_qualitative = save_qualitative
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model = TTAEvalModel(
-            sigma=sigma,
-            rel_use_gaussian_calibration=rel_gaussian,
-            rel_use_adaptive_fusion=rel_adaptive,
-            rel_use_contrastive=rel_contrastive,
-            rel_use_cogr_norm=rel_cogr_norm,
-            ovl_use_gaussian_calibration=ovl_gaussian,
-            ovl_use_adaptive_fusion=ovl_adaptive,
-            ovl_use_contrastive=ovl_contrastive,
-            ovl_use_cogr_norm=ovl_cogr_norm,
-        ).to(self.device)
+        self.model = TTAEvalModel().to(self.device)
 
-        # Load quality prompts for PAM-style quality scoring
         self._load_quality_prompts()
 
         self.meta_data = {
@@ -103,7 +75,6 @@ class TTAEval:
         return None
 
     def _load_quality_prompts(self):
-        """Load precomputed quality and contrast prompt embeddings."""
         feats_dir = os.path.join(self.data_dir, "features", "quality_prompts")
         high_path = os.path.join(feats_dir, "high.pt")
         low_path = os.path.join(feats_dir, "low.pt")
@@ -113,7 +84,6 @@ class TTAEval:
             high_emb = torch.load(high_path, map_location=self.device)
             low_emb = torch.load(low_path, map_location=self.device)
 
-            # Load unrelated prompt for contrastive scoring (optional)
             unrelated_emb = None
             if os.path.exists(unrelated_path):
                 unrelated_emb = torch.load(unrelated_path, map_location=self.device)
@@ -432,70 +402,6 @@ def parse_args():
         default=42,
         help="Seed for random number generator",
     )
-    parser.add_argument(
-        "--sigma",
-        type=float,
-        default=0.15,
-        help="Sigma for Gaussian prior calibration",
-    )
-    # REL feature flags
-    parser.add_argument(
-        "--rel_gaussian", action="store_true", default=True,
-        help="REL: use Gaussian calibration (default: True)",
-    )
-    parser.add_argument(
-        "--no_rel_gaussian", action="store_false", dest="rel_gaussian",
-        help="REL: disable Gaussian calibration",
-    )
-    parser.add_argument(
-        "--rel_adaptive", action="store_true", default=True,
-        help="REL: use adaptive fusion (default: True)",
-    )
-    parser.add_argument(
-        "--no_rel_adaptive", action="store_false", dest="rel_adaptive",
-        help="REL: disable adaptive fusion",
-    )
-    parser.add_argument(
-        "--rel_contrastive", action="store_true", default=True,
-        help="REL: use contrastive scoring (default: True)",
-    )
-    parser.add_argument(
-        "--no_rel_contrastive", action="store_false", dest="rel_contrastive",
-        help="REL: disable contrastive scoring",
-    )
-    parser.add_argument(
-        "--rel_cogr_norm", action="store_true", default=True,
-        help="REL: normalize COGR to [0,1] (default: True)",
-    )
-    parser.add_argument(
-        "--no_rel_cogr_norm", action="store_false", dest="rel_cogr_norm",
-        help="REL: disable COGR normalization",
-    )
-    # OVL feature flags
-    parser.add_argument(
-        "--ovl_gaussian", action="store_true", default=False,
-        help="OVL: use Gaussian calibration (default: False)",
-    )
-    parser.add_argument(
-        "--ovl_adaptive", action="store_true", default=False,
-        help="OVL: use adaptive fusion (default: False)",
-    )
-    parser.add_argument(
-        "--ovl_contrastive", action="store_true", default=True,
-        help="OVL: use contrastive scoring (default: True)",
-    )
-    parser.add_argument(
-        "--no_ovl_contrastive", action="store_false", dest="ovl_contrastive",
-        help="OVL: disable contrastive scoring",
-    )
-    parser.add_argument(
-        "--ovl_cogr_norm", action="store_true", default=True,
-        help="OVL: normalize COGR to [0,1] (default: True)",
-    )
-    parser.add_argument(
-        "--no_ovl_cogr_norm", action="store_false", dest="ovl_cogr_norm",
-        help="OVL: disable COGR normalization",
-    )
     return parser.parse_args()
 
 
@@ -503,33 +409,17 @@ if __name__ == "__main__":
     args = parse_args()
     fix_seed(args.seed)
     evaluator = TTAEval(
-        # paths
         data_dir=args.data_dir,
         model_dir=args.model_dir,
-        # training params
         batch_size=args.batch_size,
         lr=args.lr,
         epochs=args.epochs,
         eval_freq=args.eval_freq,
         main_metric=args.main_metric,
-        # evaluation params
         subjective_metrics=args.subjective_metrics,
         test_dataset_names=args.test_dataset_names,
-        # logging
         log_wandb=args.log_wandb,
         save_qualitative=args.save_qualitative,
-        # model hyperparameters
-        sigma=args.sigma,
-        # REL feature flags
-        rel_gaussian=args.rel_gaussian,
-        rel_adaptive=args.rel_adaptive,
-        rel_contrastive=args.rel_contrastive,
-        rel_cogr_norm=args.rel_cogr_norm,
-        # OVL feature flags
-        ovl_gaussian=args.ovl_gaussian,
-        ovl_adaptive=args.ovl_adaptive,
-        ovl_contrastive=args.ovl_contrastive,
-        ovl_cogr_norm=args.ovl_cogr_norm,
     )
 
     if args.mode == "train":
