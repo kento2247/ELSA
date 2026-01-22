@@ -917,9 +917,6 @@ def audio_parse(dataloader, feats_dir: str):
             save_dir = os.path.join(feats_dir, "separated_audio", dataset, text_id)
             os.makedirs(save_dir, exist_ok=True)
 
-            print(len(os.listdir(save_dir)), len(audio_sources))
-            input()
-
             if len(os.listdir(save_dir)) == len(audio_sources):
                 continue
 
