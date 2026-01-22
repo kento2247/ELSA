@@ -183,7 +183,6 @@ class EnsembleRankerConfig(RankerConfig):
 
 def parse_ranker_config(config_dict: dict):
     kind = config_dict.pop("kind")
-    return JudgeRankerConfig(**config_dict)
     match kind:
         case ImageBindRankerConfig.kind:
             return ImageBindRankerConfig(**config_dict)
