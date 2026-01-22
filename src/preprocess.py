@@ -633,7 +633,7 @@ class SamAudio:
         audio_file: str,
         prompts: list[str],
         predict_spans: bool = True,
-        reranking_candidates: int = 5,
+        reranking_candidates: int = 1,
     ) -> list[torch.Tensor]:
         """
         Separate audio based on text prompts.
