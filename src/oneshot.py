@@ -42,8 +42,13 @@ class OneShotTTAEvalModel(TTAEvalModel):
 
 if __name__ == "__main__":
     model = OneShotTTAEvalModel()
+    import time
+
+    start_time = time.time()
     score = model(
         audio_file_path="data/wav/tango/train/23.wav",
         text="A dog barking and a car honking.",
     )
     print("Predicted score:", score.item())
+    end_time = time.time()
+    print("Inference time:", (end_time - start_time) * 1000, "msec")
