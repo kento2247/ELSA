@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import re
+import time
 from abc import ABC
 from typing import List
 
@@ -9,6 +10,7 @@ import laion_clap
 import torch
 import torchaudio
 from google import genai
+from google.genai.types import GenerateContentConfig
 from msclap import CLAP
 from openai import OpenAI
 from pydantic import BaseModel, Field
@@ -107,6 +109,8 @@ class TextParser(ABC):
 
     Subclasses must implement parse_texts method to extract sound events.
     """
+
+    name: str
 
     def parse_texts(self, texts: list[str]) -> list[list[str]]:
         """Parse texts in batch and return list of sound events for each text.
@@ -330,22 +334,57 @@ class SoundEvents(BaseModel):
 class GeminiTextParser(TextParser):
     """Text parser using Google Gemini model."""
 
-    def __init__(self, model_name: str = "gemini-2.5-flash"):
+    def __init__(
+        self, model_name: str = "gemini-2.5-flash", cooldown_time: float = 0.1
+    ):
         """Initialize GeminiTextParser.
 
         Args:
             model_name: Name of the Gemini model to use.
         """
-        api_key = os.environ.get("GOOGLE_API_KEY")
+        self.name = "gemini"
+        self.cooldown_time = cooldown_time
+        api_key = os.environ.get("GEMINI_API_KEY")
         if api_key is None:
             api_key = input("Enter your Google API key: ")
         self.client = genai.Client(api_key=api_key)
         self.model_name = model_name
-        self.system_prompt = """Split the caption into separate sound events. Keep all modifiers (adjectives, adverbs, descriptions).
+        self.system_prompt = (
+            "You are a text parser. Output ONLY a JSON array of strings."
+        )
 
-Example:
-Caption: A large dog barks loudly while heavy rain falls on the metal roof.
-Output: ["A large dog barks loudly", "heavy rain falls on the metal roof"]"""
+    def build_prompt(self, text: str) -> str:
+        """Build prompt from caption text.
+
+        Args:
+            text: Caption text to include in the prompt.
+
+        Returns:
+            Formatted prompt string for GPT.
+        """
+        prompt = f"""Task:
+        Identify all sound events described in the following caption.
+
+        Rules:
+        - Each element must correspond to ONE sound event.
+        - Express each sound event in a concise NP or VP form.
+        - Do NOT include duplicate or semantically overlapping sound events.
+        - Do NOT include emotional, evaluative, or subjective modifiers.
+        - If the caption describes only ONE sound event, output a JSON array with a single string.
+        - Output MUST be a valid JSON array of strings.
+
+        Example 1:
+        Caption: Birds chirp loudly in the distance; a person talks nearby; more chirping.
+        Output: ["Birds chirping loudly in the distance", "A person talking nearby"]
+
+        Example 2:
+        A male vocalist sings this spirited song. The song is medium tempo with energetic electric guitar lead enthusiastic electric bass guitar  hard hitting drums and keyboard harmony. The vocals are passionate youthfulenergetic vociferous powerful and loud . This song is Hard Rock/Metal.
+        Output: ["A male vocalist singing", "An electric guitar lead playing", "An electric bass guitar playing", "Drums playing", "A keyboard harmony playing"]
+
+        Caption: {text}
+
+        Output: """
+        return prompt
 
     def parse_texts(self, texts: list[str]) -> list[list[str]]:
         """Parse texts in batch using Gemini model.
@@ -358,18 +397,20 @@ Output: ["A large dog barks loudly", "heavy rain falls on the metal roof"]"""
         """
         responses = []
         for text in texts:
-            prompt = f"{self.system_prompt}\n\nCaption: {text}\n\nOutput:"
+            prompt = self.build_prompt(text)
             response = self.client.models.generate_content(
                 model=self.model_name,
                 contents=prompt,
-                config={
-                    "response_mime_type": "application/json",
-                    "response_json_schema": SoundEvents.model_json_schema(),
-                    "temperature": 0.0,
-                },
+                config=GenerateContentConfig(
+                    system_instruction=self.system_prompt,
+                    response_mime_type="application/json",
+                    response_json_schema=SoundEvents.model_json_schema(),
+                    temperature=0.0,
+                ),
             )
             sound_events = SoundEvents.model_validate_json(response.text)
-            responses.append(sound_events.events)
+            responses.append(list(set(sound_events.events)))
+            time.sleep(self.cooldown_time)
         return responses
 
 
@@ -382,6 +423,7 @@ class GPTTextParser(TextParser):
         Args:
             model_name: Name of the GPT model to use.
         """
+        self.name = "gpt"
         self.client = OpenAI()
         self.model_name = model_name
         self.system_prompt = (
@@ -442,7 +484,7 @@ class GPTTextParser(TextParser):
                 temperature=0.0,
             )
             result = response.choices[0].message.parsed.events
-            responses.append(result)
+            responses.append(list(set(result)))
         return responses
 
 
@@ -455,6 +497,7 @@ class QwenTextParser(TextParser):
         Args:
             model_name: Name or path of the Qwen model to use.
         """
+        self.name = "qwen"
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.model = AutoModelForCausalLM.from_pretrained(
@@ -631,7 +674,7 @@ Output: """
         responses = []
         for i in range(len(chats)):
             result = self._decode_single_response(ids[i], len(inputs.input_ids[i]))
-            responses.append(result)
+            responses.append(list(set(result)))
 
         return responses
 
@@ -913,7 +956,10 @@ def text_parse(dataloader, feats_dir: str, text_parser: TextParser):
         to_parse = []
         for text, text_id, dataset in zip(texts, text_ids, datasets):
             save_path = os.path.join(
-                feats_dir, "parsed_texts", dataset, f"{text_id}.json"
+                feats_dir,
+                f"{text_parser.name}_parsed_texts",
+                dataset,
+                f"{text_id}.json",
             )
             if os.path.exists(save_path) or text in cache:
                 continue
@@ -925,12 +971,15 @@ def text_parse(dataloader, feats_dir: str, text_parser: TextParser):
             unique_texts = [t for t, _, _ in to_parse]
             results = text_parser.parse_texts(unique_texts)
             for text, result in zip(unique_texts, results):
-                cache[text] = list(set(result))
+                cache[text] = result
 
         # Save all texts in batch
         for text, text_id, dataset in zip(texts, text_ids, datasets):
             save_path = os.path.join(
-                feats_dir, "parsed_texts", dataset, f"{text_id}.json"
+                feats_dir,
+                f"{text_parser.name}_parsed_texts",
+                dataset,
+                f"{text_id}.json",
             )
             if os.path.exists(save_path):
                 continue
@@ -939,7 +988,7 @@ def text_parse(dataloader, feats_dir: str, text_parser: TextParser):
                 json.dump(cache[text], f, ensure_ascii=False, indent=0)
 
 
-def audio_parse(dataloader, feats_dir: str):
+def audio_parse(dataloader, feats_dir: str, text_parser_name: str):
     """Separate audio into individual sound sources using SAM-Audio.
 
     Uses parsed text sources as prompts to separate the original audio
@@ -958,7 +1007,10 @@ def audio_parse(dataloader, feats_dir: str):
         for text_id, dataset, audio_file in zip(text_ids, datasets, audio_files):
             # Load parsed audio sources
             text_path = os.path.join(
-                feats_dir, "parsed_texts", dataset, f"{text_id}.json"
+                feats_dir,
+                f"{text_parser_name}_parsed_texts",
+                dataset,
+                f"{text_id}.json",
             )
             with open(text_path, "r") as f:
                 audio_sources = json.load(f)
@@ -985,6 +1037,7 @@ def embed_parsed_data(
     feats_dir: str,
     embedder: CLAPEmbedder,
     seq_size: int = 20,
+    text_parser_name: str = "gpt",
 ):
     """
     Embed parsed audio segments and text prompts.
@@ -1000,7 +1053,10 @@ def embed_parsed_data(
         for text_id, dataset in zip(text_ids, datasets):
             # Load parsed audio sources
             text_path = os.path.join(
-                feats_dir, "parsed_texts", dataset, f"{text_id}.json"
+                feats_dir,
+                f"{text_parser_name}_parsed_texts",
+                dataset,
+                f"{text_id}.json",
             )
             with open(text_path, "r") as f:
                 audio_sources: list[str] = json.load(f)
@@ -1195,9 +1251,11 @@ def main(args):
 
         text_parse(dataloader, args.feats_dir, text_parser=text_parser)
         clear_gpu_memory()
-        audio_parse(dataloader, args.feats_dir)
+        audio_parse(dataloader, args.feats_dir, text_parser.name)
         clear_gpu_memory()
-        embed_parsed_data(dataloader, args.feats_dir, embedder)
+        embed_parsed_data(
+            dataloader, args.feats_dir, embedder, text_parser_name=text_parser.name
+        )
         clear_gpu_memory()
 
         # create_diff_audio(dataloader, args.feats_dir)
