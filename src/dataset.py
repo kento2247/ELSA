@@ -67,7 +67,7 @@ class TTADataset(Dataset):
             # RELATE dataset only supports REL subjective metric
             return
 
-        relate_rel_path = os.path.join(self.data_dir, "RELATE", "scores", "REL.csv")
+        relate_rel_path = os.path.join(self.data_dir, "RELATE", "scores", "REL_avg.csv")
         relate_rel_data = pd.read_csv(relate_rel_path)
 
         if split == "train" or split == "test":

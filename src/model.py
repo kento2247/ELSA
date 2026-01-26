@@ -9,7 +9,7 @@ class TTAEvalModel(nn.Module):
         embedding_dim: int = 512,
         rel_use_gaussian_calibration: bool = False,
         rel_use_adaptive_fusion: bool = True,
-        rel_use_contrastive: bool = True,
+        rel_use_contrastive: bool = False,
         rel_use_cogr_norm: bool = True,
         ovl_use_gaussian_calibration: bool = False,
         ovl_use_adaptive_fusion: bool = False,
@@ -67,7 +67,9 @@ class TTAEvalModel(nn.Module):
     def _confidence_weight(self, mask: torch.Tensor) -> torch.Tensor:
         valid_counts = mask.float().sum(dim=-1)
         confidence = torch.sigmoid((valid_counts - 2) * 0.5)
-        confidence = torch.where(valid_counts > 0, confidence, torch.zeros_like(confidence))
+        confidence = torch.where(
+            valid_counts > 0, confidence, torch.zeros_like(confidence)
+        )
         return confidence
 
     def compute_quality_score(
@@ -177,27 +179,6 @@ class TTAEvalModel(nn.Module):
 
         score = torch.where(has_valid_mask, combined_score, cogr)
 
-        # snr = torch.sum(text_feats.unsqueeze(1) * parsed_audio_feats, dim=-1)
-        # snr = (snr * mask).sum(dim=-1) / mask.sum(dim=-1).clamp(min=1)
-        # # snr = (snr * mask).max(dim=-1)[0]
-        # snr = F.softmax(torch.cat([snr.unsqueeze(-1), cogr.unsqueeze(-1)], dim=-1), dim=-1)[:, 1]
-
-        # parsed_snr = torch.sum(parsed_text_feats * parsed_audio_feats, dim=-1)
-        # orig_snr = torch.sum(parsed_text_feats * audio_feats.unsqueeze(1), dim=-1)
-        # snr = F.softmax(
-        #     torch.cat([parsed_snr.unsqueeze(-1), orig_snr.unsqueeze(-1)], dim=-1),
-        #     dim=-1,
-        # )[..., 0]
-        # # snr = (snr * mask).sum(dim=-1) / mask.sum(dim=-1).clamp(min=1)
-        # snr = (snr * mask).max(dim=-1)[0]
-
-        # result = torch.zeros_like(score)
-        # for i in range(score.shape[0]):
-        #     if subjective_metric_id[i] == 0:
-        #         result[i] = score[i]
-        #     else:
-        #         result[i] = snr[i]
-
         return self._gaussian_calibration(score, use_gaussian_calibration)
 
     def forward(
@@ -223,6 +204,8 @@ class TTAEvalModel(nn.Module):
 
         if metric_id is None or self.quality_high_emb is None:
             return rel_score
+
+        return rel_score
 
         ovl_rel_score = self._compute_relevance(
             audio_feats,

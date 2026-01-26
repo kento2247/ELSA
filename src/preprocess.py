@@ -418,7 +418,7 @@ class GeminiTextParser(TextParser):
 class GPTTextParser(TextParser):
     """Text parser using OpenAI GPT model."""
 
-    def __init__(self, model_name: str = "gpt-4o-2024-08-06"):
+    def __init__(self, model_name: str = "gpt-5.2"):
         """Initialize GPTTextParser.
 
         Args:
@@ -1300,10 +1300,10 @@ def main(args):
         clap_extract(dataloader, args.feats_dir, embedder=embedder)
         clear_gpu_memory()
 
-        text_parse(dataloader, args.feats_dir, text_parser=text_parser)
-        clear_gpu_memory()
-        audio_parse(dataloader, args.feats_dir, text_parser.name)
-        clear_gpu_memory()
+        # text_parse(dataloader, args.feats_dir, text_parser=text_parser)
+        # clear_gpu_memory()
+        # audio_parse(dataloader, args.feats_dir, text_parser.name)
+        # clear_gpu_memory()
         embed_parsed_data(
             dataloader, args.feats_dir, embedder, text_parser_name=text_parser.name
         )

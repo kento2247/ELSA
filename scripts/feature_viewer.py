@@ -16,7 +16,7 @@ from flask import Flask, render_template_string, request, send_file
 # Base paths
 DATA_DIR = Path(__file__).parent.parent / "data"
 FEATURES_DIR = DATA_DIR / "features"
-PARSED_TEXTS_DIR = FEATURES_DIR / "parsed_texts"
+PARSED_TEXTS_DIR = FEATURES_DIR / "gpt_parsed_texts"
 SEPARATED_AUDIO_DIR = FEATURES_DIR / "separated_audio"
 DIFF_AUDIO_DIR = FEATURES_DIR / "diff_audio"
 
@@ -470,7 +470,7 @@ HTML_TEMPLATE = """
 
 def load_relate_metadata() -> dict[str, dict]:
     """Load RELATE dataset metadata, mapping text_id to (text, audio_path)."""
-    csv_path = DATA_DIR / "RELATE" / "scores" / "REL.csv"
+    csv_path = DATA_DIR / "RELATE" / "scores" / "REL_avg.csv"
     if not csv_path.exists():
         return {}
     df = pd.read_csv(csv_path)
