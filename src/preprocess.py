@@ -2,19 +2,23 @@ import argparse
 import json
 import os
 import re
+import time
+from abc import ABC
 from typing import List
 
 import laion_clap
 import torch
 import torchaudio
 from google import genai
+from google.genai.types import GenerateContentConfig
 from msclap import CLAP
 from openai import OpenAI
 from pydantic import BaseModel, Field
 from sam_audio import SAMAudio, SAMAudioProcessor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from transformers import AutoModelForCausalLM, AutoTokenizer, ClapModel, ClapProcessor
+from transformers import (AutoModelForCausalLM, AutoTokenizer, ClapModel,
+                          ClapProcessor)
 
 from dataset import TTADataset
 from utils.helper_func import fix_seed
@@ -24,6 +28,17 @@ _torch_load = torch.load
 
 
 def torch_load_no_wo(*args, **kwargs):
+    """Wrapper for torch.load that disables weights_only parameter.
+
+    This is a workaround for LAION-CLAP compatibility issues.
+
+    Args:
+        *args: Positional arguments passed to torch.load.
+        **kwargs: Keyword arguments passed to torch.load.
+
+    Returns:
+        The loaded object from torch.load.
+    """
     kwargs["weights_only"] = False
     return _torch_load(*args, **kwargs)
 
@@ -32,38 +47,143 @@ torch.load = torch_load_no_wo
 
 
 class TTAPreprocessDataset(TTADataset):
+    """Dataset class for TTA preprocessing.
+
+    Extends TTADataset to provide raw data items for preprocessing.
+    """
+
     def __init__(self, data_dir: str, split: str = "train"):
+        """Initialize TTAPreprocessDataset.
+
+        Args:
+            data_dir: Directory containing the dataset.
+            split: Dataset split (train/val/test).
+        """
         super().__init__(data_dir=data_dir, split=split)
 
     def __getitem__(self, idx: int) -> dict:
+        """Get a data item by index.
+
+        Args:
+            idx: Index of the item.
+
+        Returns:
+            Dictionary containing the data item.
+        """
         data = self.database[idx]
         return data
 
 
-class MSClapEmbedder:
+class CLAPEmbedder(ABC):
+    """Base class for CLAP embedders.
+
+    Subclasses must implement embed_texts and embed_audios methods.
+    """
+
+    name: str
+
+    def embed_texts(self, texts: list[str]) -> torch.Tensor:
+        """Embed texts in batch.
+
+        Args:
+            texts: List of text strings to embed.
+
+        Returns:
+            Text embeddings tensor of shape [B, D].
+        """
+        raise NotImplementedError
+
+    def embed_audios(self, audio_files: list[str] | list[torch.Tensor]) -> torch.Tensor:
+        """Embed audios in batch.
+
+        Args:
+            audio_files: List of audio file paths.
+
+        Returns:
+            Audio embeddings tensor of shape [B, D].
+        """
+        raise NotImplementedError
+
+
+class TextParser(ABC):
+    """Base class for text parsers.
+
+    Subclasses must implement parse_texts method to extract sound events.
+    """
+
+    name: str
+
+    def parse_texts(self, texts: list[str]) -> list[list[str]]:
+        """Parse texts in batch and return list of sound events for each text.
+
+        Args:
+            texts: List of caption texts to parse.
+
+        Returns:
+            List of sound event lists for each input text.
+        """
+        raise NotImplementedError
+
+
+class MSClapEmbedder(CLAPEmbedder):
+    """CLAP embedder using Microsoft CLAP model."""
+
     def __init__(self, dtype: torch.dtype = torch.float32, seed: int = 42):
+        """Initialize MSClapEmbedder.
+
+        Args:
+            dtype: Data type for embeddings.
+            seed: Random seed for reproducibility.
+        """
+        self.name = "msclap"
         self.model = CLAP(version="2023", use_cuda=True)
         self.max_text_len = 77  # MSCLAP max text length
         self.dtype = dtype
         self.seed = seed
 
     def embed_texts(self, texts: list[str]) -> torch.Tensor:
-        """Embed texts in batch"""
+        """Embed texts in batch.
+
+        Args:
+            texts: List of text strings to embed.
+
+        Returns:
+            Text embeddings tensor of shape [B, D].
+        """
         truncated_texts = [t[: self.max_text_len] for t in texts]
         with torch.no_grad():
             text_embeddings = self.model.get_text_embeddings(truncated_texts)
         return text_embeddings.to(self.dtype)
 
-    def embed_audios(self, audio_files: list[str]) -> torch.Tensor:
-        """Embed audios in batch"""
+    def embed_audios(self, audio_files: list[str] | list[torch.Tensor]) -> torch.Tensor:
+        """Embed audios in batch.
+
+        Args:
+            audio_files: List of audio file paths or tensor.
+
+        Returns:
+            Audio embeddings tensor of shape [B, D].
+        """
         fix_seed(self.seed)  # Ensure seed is fixed before audio embedding
         with torch.no_grad():
+            if isinstance(audio_files[0], torch.Tensor):
+                raise NotImplementedError(
+                    "MS-CLAP embedder does not support audio tensors."
+                )
             audio_embeddings = self.model.get_audio_embeddings(audio_files)
         return audio_embeddings.to(self.dtype)
 
 
-class LaionClapEmbedder:
+class LaionClapEmbedder(CLAPEmbedder):
+    """CLAP embedder using LAION CLAP model."""
+
     def __init__(self, dtype: torch.dtype = torch.float32):
+        """Initialize LaionClapEmbedder.
+
+        Args:
+            dtype: Data type for embeddings.
+        """
+        self.name = "laionclap"
         self.model = laion_clap.CLAP_Module(enable_fusion=False)
         self.model.load_ckpt("models/630k-audioset-best.pt")
         self.model.eval()
@@ -71,7 +191,14 @@ class LaionClapEmbedder:
         self.dtype = dtype
 
     def embed_texts(self, texts: list[str]) -> torch.Tensor:
-        """Embed texts in batch (truncate long texts)"""
+        """Embed texts in batch with truncation for long texts.
+
+        Args:
+            texts: List of text strings to embed.
+
+        Returns:
+            Text embeddings tensor of shape [B, D].
+        """
         truncated_texts = [t[: self.max_text_len] for t in texts]
         with torch.no_grad():
             text_embeddings = self.model.get_text_embedding(
@@ -79,17 +206,36 @@ class LaionClapEmbedder:
             )
         return text_embeddings.to(self.dtype)
 
-    def embed_audios(self, audio_files: list[str]) -> torch.Tensor:
-        """Embed audios in batch"""
+    def embed_audios(self, audio_files: list[str] | list[torch.Tensor]) -> torch.Tensor:
+        """Embed audios in batch.
+
+        Args:
+            audio_files: List of audio file paths or tensor.
+
+        Returns:
+            Audio embeddings tensor of shape [B, D].
+        """
         with torch.no_grad():
+            if isinstance(audio_files[0], torch.Tensor):
+                raise NotImplementedError(
+                    "LAION-CLAP embedder does not support audio tensors."
+                )
             audio_embeddings = self.model.get_audio_embedding_from_filelist(
                 x=audio_files, use_tensor=True
             )
         return audio_embeddings.to(self.dtype)
 
 
-class HumanCLAPEmbedder:
+class HumanCLAPEmbedder(CLAPEmbedder):
+    """CLAP embedder using Human-CLAP model."""
+
     def __init__(self, dtype: torch.dtype = torch.float32):
+        """Initialize HumanCLAPEmbedder.
+
+        Args:
+            dtype: Data type for embeddings.
+        """
+        self.name = "humanclap"
         model_path = "sarulab-speech/human-clap-wsce-mae"
         processor_path = "laion/clap-htsat-fused"
         self.model = ClapModel.from_pretrained(model_path).to(0)
@@ -100,7 +246,14 @@ class HumanCLAPEmbedder:
         self.resampler_16k = torchaudio.transforms.Resample(16000, self.target_sr)
 
     def _load_audio(self, audio_path: str) -> list:
-        """Load audio file and resample to 48kHz if needed"""
+        """Load audio file and resample to 48kHz if needed.
+
+        Args:
+            audio_path: Path to the audio file.
+
+        Returns:
+            Audio waveform as numpy array.
+        """
         audio, sr = torchaudio.load(audio_path)
         audio = audio[0]  # mono
         if sr == 16000:
@@ -110,8 +263,29 @@ class HumanCLAPEmbedder:
             audio = resampler(audio)
         return audio.detach().numpy().copy()
 
+    def resample_audio(self, audio: torch.Tensor, orig_sr: int) -> torch.Tensor:
+        """Resample audio tensor to target sample rate.
+
+        Args:
+            audio: Audio tensor.
+
+        Returns:
+            Resampled audio tensor.
+        """
+        if orig_sr == self.target_sr:
+            return audio
+        resampler = torchaudio.transforms.Resample(orig_sr, self.target_sr)
+        return resampler(audio)
+
     def embed_texts(self, texts: list[str]) -> torch.Tensor:
-        """Embed texts in batch (truncate long texts)"""
+        """Embed texts in batch with truncation for long texts.
+
+        Args:
+            texts: List of text strings or tensor to embed.
+
+        Returns:
+            Text embeddings tensor of shape [B, D].
+        """
         with torch.no_grad():
             inputs = self.processor(
                 text=texts,
@@ -123,9 +297,22 @@ class HumanCLAPEmbedder:
             text_embeddings = self.model.get_text_features(**inputs)
         return text_embeddings.to(self.dtype)
 
-    def embed_audios(self, audio_files: list[str]) -> torch.Tensor:
-        """Embed audios in batch"""
-        audios = [self._load_audio(f) for f in audio_files]
+    def embed_audios(self, audio_files: list[str] | list[torch.Tensor]) -> torch.Tensor:
+        """Embed audios in batch.
+
+        Args:
+            audio_files: List of audio file paths.
+
+        Returns:
+            Audio embeddings tensor of shape [B, D].
+        """
+        if isinstance(audio_files[0], torch.Tensor):
+            audios = [
+                audio_file.detach().cpu().float().numpy().copy()
+                for audio_file in audio_files
+            ]
+        else:
+            audios = [self._load_audio(f) for f in audio_files]
         with torch.no_grad():
             inputs = self.processor(
                 audios=audios,
@@ -145,48 +332,37 @@ class SoundEvents(BaseModel):
     )
 
 
-class GeminiTextParser:
-    def __init__(self, model_name: str = "gemini-2.5-flash"):
-        api_key = os.environ.get("GOOGLE_API_KEY")
+class GeminiTextParser(TextParser):
+    """Text parser using Google Gemini model."""
+
+    def __init__(
+        self, model_name: str = "gemini-2.5-flash", cooldown_time: float = 0.1
+    ):
+        """Initialize GeminiTextParser.
+
+        Args:
+            model_name: Name of the Gemini model to use.
+        """
+        self.name = "gemini"
+        self.cooldown_time = cooldown_time
+        api_key = os.environ.get("GEMINI_API_KEY")
         if api_key is None:
             api_key = input("Enter your Google API key: ")
         self.client = genai.Client(api_key=api_key)
-        self.model_name = model_name
-        self.system_prompt = """Split the caption into separate sound events. Keep all modifiers (adjectives, adverbs, descriptions).
-
-Example:
-Caption: A large dog barks loudly while heavy rain falls on the metal roof.
-Output: ["A large dog barks loudly", "heavy rain falls on the metal roof"]"""
-
-    def parse_texts(self, texts: list[str]) -> list[list[str]]:
-        """Parse texts in batch and return list of sound events for each text."""
-        responses = []
-        for text in texts:
-            prompt = f"{self.system_prompt}\n\nCaption: {text}\n\nOutput:"
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=prompt,
-                config={
-                    "response_mime_type": "application/json",
-                    "response_json_schema": SoundEvents.model_json_schema(),
-                },
-                temperature=0.0,
-            )
-            sound_events = SoundEvents.model_validate_json(response.text)
-            responses.append(sound_events.events)
-        return responses
-
-
-class GPTTextParser:
-    def __init__(self, model_name: str = "gpt-4o-2024-08-06"):
-        self.client = OpenAI()
         self.model_name = model_name
         self.system_prompt = (
             "You are a text parser. Output ONLY a JSON array of strings."
         )
 
     def build_prompt(self, text: str) -> str:
-        """Build prompt from text"""
+        """Build prompt from caption text.
+
+        Args:
+            text: Caption text to include in the prompt.
+
+        Returns:
+            Formatted prompt string for GPT.
+        """
         prompt = f"""Task:
         Identify all sound events described in the following caption.
 
@@ -212,6 +388,91 @@ class GPTTextParser:
         return prompt
 
     def parse_texts(self, texts: list[str]) -> list[list[str]]:
+        """Parse texts in batch using Gemini model.
+
+        Args:
+            texts: List of caption texts to parse.
+
+        Returns:
+            List of sound event lists for each input text.
+        """
+        responses = []
+        for text in texts:
+            prompt = self.build_prompt(text)
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt,
+                config=GenerateContentConfig(
+                    system_instruction=self.system_prompt,
+                    response_mime_type="application/json",
+                    response_json_schema=SoundEvents.model_json_schema(),
+                    temperature=0.0,
+                ),
+            )
+            sound_events = SoundEvents.model_validate_json(response.text)
+            responses.append(list(set(sound_events.events)))
+            time.sleep(self.cooldown_time)
+        return responses
+
+
+class GPTTextParser(TextParser):
+    """Text parser using OpenAI GPT model."""
+
+    def __init__(self, model_name: str = "gpt-4o-2024-08-06"):
+        """Initialize GPTTextParser.
+
+        Args:
+            model_name: Name of the GPT model to use.
+        """
+        self.name = "gpt"
+        self.client = OpenAI()
+        self.model_name = model_name
+        self.system_prompt = (
+            "You are a text parser. Output ONLY a JSON array of strings."
+        )
+
+    def build_prompt(self, text: str) -> str:
+        """Build prompt from caption text.
+
+        Args:
+            text: Caption text to include in the prompt.
+
+        Returns:
+            Formatted prompt string for GPT.
+        """
+        prompt = f"""Task:
+        Identify all sound events described in the following caption.
+
+        Rules:
+        - Each element must correspond to ONE sound event.
+        - Express each sound event in a concise NP or VP form.
+        - Do NOT include duplicate or semantically overlapping sound events.
+        - Do NOT include emotional, evaluative, or subjective modifiers.
+        - If the caption describes only ONE sound event, output a JSON array with a single string.
+        - Output MUST be a valid JSON array of strings.
+
+        Example 1:
+        Caption: Birds chirp loudly in the distance; a person talks nearby; more chirping.
+        Output: ["Birds chirping loudly in the distance", "A person talking nearby"]
+
+        Example 2:
+        A male vocalist sings this spirited song. The song is medium tempo with energetic electric guitar lead enthusiastic electric bass guitar  hard hitting drums and keyboard harmony. The vocals are passionate youthfulenergetic vociferous powerful and loud . This song is Hard Rock/Metal.
+        Output: ["A male vocalist singing", "An electric guitar lead playing", "An electric bass guitar playing", "Drums playing", "A keyboard harmony playing"]
+
+        Caption: {text}
+
+        Output: """
+        return prompt
+
+    def parse_texts(self, texts: list[str]) -> list[list[str]]:
+        """Parse texts in batch using GPT model.
+
+        Args:
+            texts: List of caption texts to parse.
+
+        Returns:
+            List of sound event lists for each input text.
+        """
         responses = []
         for text in texts:
             response = self.client.beta.chat.completions.parse(
@@ -224,12 +485,20 @@ class GPTTextParser:
                 temperature=0.0,
             )
             result = response.choices[0].message.parsed.events
-            responses.append(result)
+            responses.append(list(set(result)))
         return responses
 
 
-class QwenTextParser:
+class QwenTextParser(TextParser):
+    """Text parser using Qwen model for local inference."""
+
     def __init__(self, model_name: str = "Qwen/Qwen3-4B-Instruct-2507"):
+        """Initialize QwenTextParser.
+
+        Args:
+            model_name: Name or path of the Qwen model to use.
+        """
+        self.name = "qwen"
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.model = AutoModelForCausalLM.from_pretrained(
@@ -242,7 +511,14 @@ class QwenTextParser:
         self.model.to(self.device)
 
     def _build_chat_template(self, text: str) -> str:
-        """Build chat template from text"""
+        """Build chat template from input text.
+
+        Args:
+            text: Caption text to process.
+
+        Returns:
+            Formatted chat template string for the model.
+        """
         system_prompt = "Output only a JSON array of strings."
         user_prompt = f"""Split the caption into a list of distinct sound events.
 Preserve all modifiers (adjectives, adverbs, and descriptive phrases).
@@ -269,7 +545,14 @@ Output: """
         )
 
     def _normalize_output(self, result_text: str) -> str:
-        """Normalize output text (convert to list format)"""
+        """Normalize output text to JSON list format.
+
+        Args:
+            result_text: Raw output text from the model.
+
+        Returns:
+            JSON string representing a list of sound events.
+        """
         result_text = result_text.strip()
         # Remove newlines to make single line
         result_text = " ".join(result_text.split())
@@ -295,7 +578,14 @@ Output: """
         return json.dumps([result_text])
 
     def _fix_unquoted_strings(self, result_text: str) -> str:
-        """Wrap unquoted strings with double quotes"""
+        """Wrap unquoted strings with double quotes.
+
+        Args:
+            result_text: Text containing potentially unquoted strings.
+
+        Returns:
+            JSON string with properly quoted elements.
+        """
         # Remove extra { } ( )
         for char in "{}()":
             result_text = result_text.replace(char, "")
@@ -322,7 +612,17 @@ Output: """
         return "[" + ", ".join(quoted_items) + "]"
 
     def _parse_json_result(self, result_text: str) -> list:
-        """Parse JSON string and convert to list"""
+        """Parse JSON string and convert to list.
+
+        Args:
+            result_text: JSON string to parse.
+
+        Returns:
+            List of sound events.
+
+        Raises:
+            RuntimeError: If JSON parsing fails.
+        """
         try:
             result: list = json.loads(result_text)
             if isinstance(result, list):
@@ -337,7 +637,15 @@ Output: """
             raise RuntimeError(f"{e}: \n{result_text}")
 
     def _decode_single_response(self, ids: torch.Tensor, input_len: int) -> list:
-        """Decode and parse a single response"""
+        """Decode and parse a single response from generated token IDs.
+
+        Args:
+            ids: Generated token IDs including input.
+            input_len: Length of the input tokens to skip.
+
+        Returns:
+            List of parsed sound events.
+        """
         result_text = self.tokenizer.decode(
             ids[input_len:],
             skip_special_tokens=True,
@@ -346,6 +654,14 @@ Output: """
         return self._parse_json_result(result_text)
 
     def parse_texts(self, texts: list[str]) -> list[list[str]]:
+        """Parse texts in batch using Qwen model.
+
+        Args:
+            texts: List of caption texts to parse.
+
+        Returns:
+            List of sound event lists for each input text.
+        """
         chats = [self._build_chat_template(text) for text in texts]
 
         inputs = self.tokenizer(
@@ -359,15 +675,23 @@ Output: """
         responses = []
         for i in range(len(chats)):
             result = self._decode_single_response(ids[i], len(inputs.input_ids[i]))
-            responses.append(result)
+            responses.append(list(set(result)))
 
         return responses
 
 
 class SamAudio:
+    """Audio separation using SAM-Audio model."""
+
     def __init__(
         self, model_name: str = "facebook/sam-audio-large-tv", dtype=torch.bfloat16
     ):
+        """Initialize SamAudio.
+
+        Args:
+            model_name: Name or path of the SAM-Audio model.
+            dtype: Data type for model inference.
+        """
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.dtype = dtype
         self.model_name = model_name
@@ -380,7 +704,7 @@ class SamAudio:
         self,
         audio_file: str,
         prompts: list[str],
-        predict_spans: bool = False,
+        predict_spans: bool = True,
         reranking_candidates: int = 1,
     ) -> list[torch.Tensor]:
         """
@@ -395,6 +719,7 @@ class SamAudio:
         """
         separated_audios = []
         for prompt in prompts:
+            prompt = prompt.lower()
             with torch.inference_mode():
                 batch = self.processor(
                     audios=[audio_file],
@@ -426,7 +751,7 @@ class SamAudio:
         torchaudio.save(save_path, audio_tensor.cpu().to(dtype), sample_rate)
 
 
-### feature saving functions ###
+### utils
 
 
 def check_all_file_exists(
@@ -454,6 +779,18 @@ def save_feats(
     file_name: str,
     feats: torch.Tensor,
 ) -> str:
+    """Save feature tensor to disk.
+
+    Args:
+        feats_dir: Root directory for features.
+        feats_name: Name of the feature type (e.g., "msclap_audio").
+        dataset: Dataset name.
+        file_name: Output file name.
+        feats: Feature tensor to save.
+
+    Returns:
+        Path to the saved file.
+    """
     save_path = os.path.join(feats_dir, feats_name, dataset, file_name)
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     torch.save(feats, save_path)
@@ -488,13 +825,77 @@ def save_batch_feats(
         )
 
 
+def clear_gpu_memory():
+    """Clear GPU memory cache.
+
+    Runs garbage collection and empties CUDA cache to free up GPU memory.
+    """
+    import gc
+
+    gc.collect()
+    torch.cuda.empty_cache()
+
+
+### Quality prompt embeddings ###
+
+QUALITY_PROMPTS = {
+    "high": "the sound is clear and clean",
+    "low": "the sound is noisy and with artifacts",
+}
+
+# Negative/unrelated prompt for contrastive REL scoring (DISCODE-inspired)
+CONTRAST_PROMPTS = {
+    "unrelated": "silence with no sound events",
+}
+
+
+def embed_quality_prompts(feats_dir: str, embedder: CLAPEmbedder):
+    """Embed PAM-style quality prompts and contrast prompts, save to disk.
+
+    Args:
+        feats_dir: Directory to save the quality prompt embeddings.
+        embedder: CLAP embedder instance to use for text embedding.
+    """
+    save_dir = os.path.join(feats_dir, "quality_prompts")
+    os.makedirs(save_dir, exist_ok=True)
+
+    # Embed quality prompts (high/low)
+    for quality_level, prompt in QUALITY_PROMPTS.items():
+        save_path = os.path.join(save_dir, f"{quality_level}.pt")
+        if os.path.exists(save_path):
+            print(f"Quality prompt '{quality_level}' already exists at {save_path}")
+            continue
+
+        with torch.no_grad():
+            embedding = embedder.embed_texts([prompt])  # [1, D]
+        torch.save(embedding.squeeze(0), save_path)  # [D]
+        print(f"Saved quality prompt '{quality_level}' to {save_path}")
+
+    # Embed contrast prompts (unrelated) for DISCODE-style contrastive scoring
+    for contrast_type, prompt in CONTRAST_PROMPTS.items():
+        save_path = os.path.join(save_dir, f"{contrast_type}.pt")
+        if os.path.exists(save_path):
+            print(f"Contrast prompt '{contrast_type}' already exists at {save_path}")
+            continue
+
+        with torch.no_grad():
+            embedding = embedder.embed_texts([prompt])  # [1, D]
+        torch.save(embedding.squeeze(0), save_path)  # [D]
+        print(f"Saved contrast prompt '{contrast_type}' to {save_path}")
+
+
 ### feature extraction main ###
 
 
-def msclap_extract(dataloader, feats_dir: str, seed: int = 42):
-    msclap_embedder = MSClapEmbedder(seed=seed)
-
-    for batch in tqdm(dataloader, desc="Extracting MSCLAP features"):
+def clap_extract(dataloader, feats_dir: str, embedder: CLAPEmbedder):
+    """
+    Extract CLAP features for audio and text in the dataloader.
+    Args:
+        dataloader: DataLoader for the dataset.
+        feats_dir: Directory to save features.
+        embedder: CLAP embedder instance.
+    """
+    for batch in tqdm(dataloader, desc="Extracting CLAP features"):
         audio_files = batch["audio_file_path"]
         texts = batch["text"]
         text_ids = batch["text_id"]
@@ -509,132 +910,42 @@ def msclap_extract(dataloader, feats_dir: str, seed: int = 42):
             datasets,
             audio_files,
             feats_dir,
-            "msclap_audio",
+            f"{embedder.name}_audio",
         ) and check_all_file_exists(
             datasets,
             text_file_names,
             feats_dir,
-            "msclap_text",
+            f"{embedder.name}_text",
         ):
             continue
 
-        msclap_audio_embeddings = msclap_embedder.embed_audios(audio_files)
-        msclap_text_embeddings = msclap_embedder.embed_texts(texts)
+        audio_embeddings = embedder.embed_audios(audio_files)
+        text_embeddings = embedder.embed_texts(texts)
 
         save_batch_feats(
             feats_dir,
             datasets,
-            "msclap_audio",
+            f"{embedder.name}_audio",
             audio_file_names,
-            msclap_audio_embeddings,
+            audio_embeddings,
         )
         save_batch_feats(
             feats_dir,
             datasets,
-            "msclap_text",
+            f"{embedder.name}_text",
             text_file_names,
-            msclap_text_embeddings,
+            text_embeddings,
         )
 
 
-def humanclap_extract(dataloader, feats_dir: str):
-    human_clap_embedder = HumanCLAPEmbedder()
-    for batch in tqdm(dataloader, desc="Extracting HumanCLAP features"):
-        audio_files = batch["audio_file_path"]
-        texts = batch["text"]
-        text_ids = batch["text_id"]
-        datasets = batch["dataset"]
-
-        audio_file_names = [
-            os.path.basename(path).replace(".wav", ".pt") for path in audio_files
-        ]
-        text_file_names = [f"{text_id}.pt" for text_id in text_ids]
-
-        if check_all_file_exists(
-            datasets,
-            audio_files,
-            feats_dir,
-            "humanclap_audio",
-        ) and check_all_file_exists(
-            datasets,
-            text_file_names,
-            feats_dir,
-            "humanclap_text",
-        ):
-            continue
-
-        human_audio_embeddings = human_clap_embedder.embed_audios(audio_files)
-        human_text_embeddings = human_clap_embedder.embed_texts(texts)
-
-        save_batch_feats(
-            feats_dir,
-            datasets,
-            "humanclap_audio",
-            audio_file_names,
-            human_audio_embeddings,
-        )
-        save_batch_feats(
-            feats_dir,
-            datasets,
-            "humanclap_text",
-            text_file_names,
-            human_text_embeddings,
-        )
-
-
-def laionclap_extract(dataloader, feats_dir: str):
-    laion_clap_embedder = LaionClapEmbedder()
-    for batch in tqdm(dataloader, desc="Extracting LaionCLAP features"):
-        audio_files = batch["audio_file_path"]
-        texts = batch["text"]
-        text_ids = batch["text_id"]
-        datasets = batch["dataset"]
-
-        audio_file_names = [
-            os.path.basename(path).replace(".wav", ".pt") for path in audio_files
-        ]
-        text_file_names = [f"{text_id}.pt" for text_id in text_ids]
-
-        if check_all_file_exists(
-            datasets,
-            audio_files,
-            feats_dir,
-            "laionclap_audio",
-        ) and check_all_file_exists(
-            datasets,
-            text_file_names,
-            feats_dir,
-            "laionclap_text",
-        ):
-            continue
-
-        laion_audio_embeddings = laion_clap_embedder.embed_audios(audio_files)
-        laion_text_embeddings = laion_clap_embedder.embed_texts(texts)
-
-        save_batch_feats(
-            feats_dir,
-            datasets,
-            "laionclap_audio",
-            audio_file_names,
-            laion_audio_embeddings,
-        )
-        save_batch_feats(
-            feats_dir,
-            datasets,
-            "laionclap_text",
-            text_file_names,
-            laion_text_embeddings,
-        )
-
-
-def text_parse(dataloader, feats_dir: str, model: str = "gpt"):
-    if model == "gemini":
-        text_parser = GeminiTextParser()
-    elif model == "gpt":
-        text_parser = GPTTextParser()
-    elif model == "qwen":
-        text_parser = QwenTextParser()
-
+def text_parse(dataloader, feats_dir: str, text_parser: TextParser):
+    """
+    Parse text using specified model to extract sound events.
+    Args:
+        dataloader: DataLoader for the dataset.
+        feats_dir: Directory to save features.
+        text_parser: TextParser instance.
+    """
     cache: dict[str, list[str]] = {}  # text -> parsed events
 
     for batch in tqdm(dataloader, desc="Parsing Text"):
@@ -646,7 +957,10 @@ def text_parse(dataloader, feats_dir: str, model: str = "gpt"):
         to_parse = []
         for text, text_id, dataset in zip(texts, text_ids, datasets):
             save_path = os.path.join(
-                feats_dir, "parsed_texts", dataset, f"{text_id}.json"
+                feats_dir,
+                f"{text_parser.name}_parsed_texts",
+                dataset,
+                f"{text_id}.json",
             )
             if os.path.exists(save_path) or text in cache:
                 continue
@@ -658,12 +972,15 @@ def text_parse(dataloader, feats_dir: str, model: str = "gpt"):
             unique_texts = [t for t, _, _ in to_parse]
             results = text_parser.parse_texts(unique_texts)
             for text, result in zip(unique_texts, results):
-                cache[text] = list(set(result))
+                cache[text] = result
 
         # Save all texts in batch
         for text, text_id, dataset in zip(texts, text_ids, datasets):
             save_path = os.path.join(
-                feats_dir, "parsed_texts", dataset, f"{text_id}.json"
+                feats_dir,
+                f"{text_parser.name}_parsed_texts",
+                dataset,
+                f"{text_id}.json",
             )
             if os.path.exists(save_path):
                 continue
@@ -672,9 +989,18 @@ def text_parse(dataloader, feats_dir: str, model: str = "gpt"):
                 json.dump(cache[text], f, ensure_ascii=False, indent=0)
 
 
-def audio_parse(dataloader, feats_dir: str):
-    """Parse audio using SAM-Audio based on parsed text sources"""
+def audio_parse(dataloader, feats_dir: str, text_parser_name: str):
+    """Separate audio into individual sound sources using SAM-Audio.
+
+    Uses parsed text sources as prompts to separate the original audio
+    into individual sound components.
+
+    Args:
+        dataloader: DataLoader for the dataset.
+        feats_dir: Directory containing parsed texts and for saving separated audio.
+    """
     sam_audio = SamAudio()
+    max_chunk_sec = 20
     for batch in tqdm(dataloader, desc="Parsing Audio with SAM-Audio"):
         audio_files = batch["audio_file_path"]
         text_ids = batch["text_id"]
@@ -683,53 +1009,96 @@ def audio_parse(dataloader, feats_dir: str):
         for text_id, dataset, audio_file in zip(text_ids, datasets, audio_files):
             # Load parsed audio sources
             text_path = os.path.join(
-                feats_dir, "parsed_texts", dataset, f"{text_id}.json"
+                feats_dir,
+                f"{text_parser_name}_parsed_texts",
+                dataset,
+                f"{text_id}.json",
             )
             with open(text_path, "r") as f:
                 audio_sources = json.load(f)
-            audio_sources = [src.lower() for src in audio_sources]
             save_dir = os.path.join(feats_dir, "separated_audio", dataset, text_id)
             os.makedirs(save_dir, exist_ok=True)
 
-            if len(os.listdir(save_dir)) == len(audio_sources):
+            existing_wavs = [
+                f for f in os.listdir(save_dir) if f.endswith(".wav")
+            ]
+            if len(existing_wavs) == len(audio_sources):
+                continue
+            if len(audio_sources) == 0:
                 continue
 
-            # Split audio using SAM-Audio with automatic mixed precision
-            with torch.amp.autocast("cuda"):
-                separated_audios: list[torch.Tensor] = sam_audio.separate_audio(
-                    audio_file, audio_sources
-                )
+            audio_info = torchaudio.info(audio_file)
+            duration_sec = audio_info.num_frames / audio_info.sample_rate
 
-            # Save separated audio files
-            for i, audio_tensor in enumerate(separated_audios):
+            if duration_sec <= max_chunk_sec:
+                # Split audio using SAM-Audio with automatic mixed precision
+                with torch.amp.autocast("cuda"):
+                    separated_audios: list[torch.Tensor] = sam_audio.separate_audio(
+                        audio_file, audio_sources
+                    )
+
+                # Save separated audio files
+                for i, audio_tensor in enumerate(separated_audios):
+                    save_path = os.path.join(save_dir, f"{i}.wav")
+                    sam_audio.save_audio(save_path, audio_tensor)
+                continue
+
+            # Long audio: chunk -> SAM -> stitch per prompt
+            audio, sr = torchaudio.load(audio_file)
+            target_sr = sam_audio.processor.audio_sampling_rate
+            if sr != target_sr:
+                resampler = torchaudio.transforms.Resample(sr, target_sr)
+                audio = resampler(audio)
+                sr = target_sr
+
+            samples_per_chunk = int(sr * max_chunk_sec)
+            total_samples = audio.shape[-1]
+            chunk_dir = os.path.join(save_dir, "chunks")
+            os.makedirs(chunk_dir, exist_ok=True)
+
+            chunk_paths = []
+            for chunk_idx, start in enumerate(range(0, total_samples, samples_per_chunk)):
+                end = min(start + samples_per_chunk, total_samples)
+                if end <= start:
+                    continue
+                chunk_audio = audio[..., start:end]
+                chunk_path = os.path.join(chunk_dir, f"{chunk_idx}.wav")
+                torchaudio.save(chunk_path, chunk_audio, sr)
+                chunk_paths.append(chunk_path)
+
+            stitched: list[list[torch.Tensor]] = [[] for _ in audio_sources]
+            for chunk_path in chunk_paths:
+                with torch.amp.autocast("cuda"):
+                    chunk_separated = sam_audio.separate_audio(
+                        chunk_path, audio_sources
+                    )
+                for i, audio_tensor in enumerate(chunk_separated):
+                    if audio_tensor.dim() == 1:
+                        audio_tensor = audio_tensor.unsqueeze(0)
+                    stitched[i].append(audio_tensor.detach().cpu())
+
+            for i, parts in enumerate(stitched):
+                if len(parts) == 0:
+                    continue
+                merged = torch.cat(parts, dim=-1)
                 save_path = os.path.join(save_dir, f"{i}.wav")
-                sam_audio.save_audio(save_path, audio_tensor)
+                sam_audio.save_audio(save_path, merged)
 
 
 def embed_parsed_data(
     dataloader,
     feats_dir: str,
+    embedder: CLAPEmbedder,
     seq_size: int = 20,
-    embed_model: str = "laionclap",
+    text_parser_name: str = "gpt",
 ):
     """
     Embed parsed audio segments and text prompts.
     Args:
         dataloader: DataLoader for the dataset.
-        feats_dir: Directory containing features (separated_audio, parsed_texts).
-        seq_size: Maximum sequence size for padding/truncating.
-        embed_model: Embedding model to use ("laionclap" or "msclap").
+        feats_dir: Directory to save features.
+        embedder: CLAP embedder instance.
     """
-    if embed_model == "laionclap":
-        embedder = LaionClapEmbedder()
-        feats_prefix = "laionclap"
-    elif embed_model == "msclap":
-        embedder = MSClapEmbedder()
-        feats_prefix = "msclap"
-    elif embed_model == "humanclap":
-        embedder = HumanCLAPEmbedder()
-        feats_prefix = "humanclap"
-
     for batch in tqdm(dataloader, desc="Embedding Parsed Audio Segments"):
         text_ids = batch["text_id"]
         datasets = batch["dataset"]
@@ -737,7 +1106,10 @@ def embed_parsed_data(
         for text_id, dataset in zip(text_ids, datasets):
             # Load parsed audio sources
             text_path = os.path.join(
-                feats_dir, "parsed_texts", dataset, f"{text_id}.json"
+                feats_dir,
+                f"{text_parser_name}_parsed_texts",
+                dataset,
+                f"{text_id}.json",
             )
             with open(text_path, "r") as f:
                 audio_sources: list[str] = json.load(f)
@@ -753,7 +1125,6 @@ def embed_parsed_data(
             )
 
             if len(audio_files) == 0 and len(audio_sources) == 0:
-                print(text_id, dataset)
                 continue
             if not len(audio_files) == len(audio_sources):
                 raise ValueError(
@@ -796,21 +1167,21 @@ def embed_parsed_data(
             # Save embeddings and mask
             save_feats(
                 feats_dir=feats_dir,
-                feats_name=f"{feats_prefix}_parsed_audio",
+                feats_name=f"{embedder.name}_parsed_audio",
                 dataset=dataset,
                 file_name=f"{text_id}.pt",
                 feats=audio_embeddings,
             )
             save_feats(
                 feats_dir=feats_dir,
-                feats_name=f"{feats_prefix}_parsed_text",
+                feats_name=f"{embedder.name}_parsed_text",
                 dataset=dataset,
                 file_name=f"{text_id}.pt",
                 feats=text_embeddings,
             )
             save_feats(
                 feats_dir=feats_dir,
-                feats_name="parsed_mask",
+                feats_name=f"{embedder.name}_parsed_mask",
                 dataset=dataset,
                 file_name=f"{text_id}.pt",
                 feats=mask,
@@ -818,7 +1189,16 @@ def embed_parsed_data(
 
 
 def create_diff_audio(dataloader, feats_dir: str):
-    """Parse audio using SAM-Audio based on parsed text sources"""
+    """Create difference audio by subtracting separated audio from original.
+
+    This function extracts residual sounds that are not captured in the
+    separated audio files by subtracting the merged separated audio from
+    the original audio.
+
+    Args:
+        dataloader: DataLoader for the dataset.
+        feats_dir: Directory containing features and separated audio.
+    """
     for batch in tqdm(dataloader, desc="Parsing Audio with SAM-Audio"):
         audio_files = batch["audio_file_path"]
         text_ids = batch["text_id"]
@@ -845,8 +1225,8 @@ def create_diff_audio(dataloader, feats_dir: str):
             if len(separated_audio_files) == 0:
                 continue
 
-            # separated_audiosに含まれない音だけを抽出する
-            # 各時刻で最大振幅を持つseparated_audioの値を取り、それをoriginal_audioから引く
+            # Extract sounds not included in separated_audios
+            # Take the value of separated_audio with maximum amplitude at each time step and subtract it from original_audio
             original_audio, orig_sr = torchaudio.load(audio_file)
             separated_audios = []
             for sep_audio_file in separated_audio_files:
@@ -866,11 +1246,11 @@ def create_diff_audio(dataloader, feats_dir: str):
             original_audio = original_audio[..., :min_len]
             separated_audios = separated_audios[..., :min_len]
 
-            # 各時刻で最大絶対値を持つseparated_audioの値を使用（波形のset）
-            # これにより、同じ音が複数回抽出されても逆位相にならない
+            # Use the separated_audio value with maximum absolute value at each time step (waveform set)
+            # This prevents phase inversion when the same sound is extracted multiple times
             abs_separated = torch.abs(separated_audios)  # (N, C, T)
             max_abs_idx = abs_separated.argmax(dim=0)  # (C, T)
-            # gatherを使って各時刻で最大絶対値を持つ波形の実際の値を取得
+            # Use gather to get the actual waveform values with maximum absolute value at each time step
             merged_separated = torch.gather(
                 separated_audios, 0, max_abs_idx.unsqueeze(0)
             ).squeeze(0)  # (C, T)
@@ -885,41 +1265,62 @@ def create_diff_audio(dataloader, feats_dir: str):
             torchaudio.save(diff_audio_path, diff_audio, sep_sr)
 
 
-def clear_gpu_memory():
-    """Clear GPU memory cache"""
-    import gc
-
-    gc.collect()
-    torch.cuda.empty_cache()
-
-
 def main(args):
-    dataset = TTAPreprocessDataset(data_dir=args.data_dir, split=args.split)
-    dataloader = DataLoader(dataset, batch_size=args.bs, shuffle=False)
+    """
+    Main preprocessing function.
+    Args:
+        args: Parsed command-line arguments.
+    """
+    embedder_model = args.clap_model
 
-    # humanclap_extract(dataloader, args.feats_dir)
-    # clear_gpu_memory()
-    # laionclap_extract(dataloader, args.feats_dir)
-    # clear_gpu_memory()
-    # msclap_extract(dataloader, args.feats_dir, seed=args.seed)
-    # clear_gpu_memory()
-    # text_parse(dataloader, args.feats_dir, model = "gpt")
-    # clear_gpu_memory()
-    # audio_parse(dataloader, args.feats_dir)
-    # clear_gpu_memory()
-    # embed_parsed_data(dataloader, args.feats_dir, embed_model="msclap")
-    humanclap_extract(dataloader, args.feats_dir)
-    clear_gpu_memory()
-    # embed_parsed_data(dataloader, args.feats_dir, embed_model="humanclap")
-    # clear_gpu_memory()
-    # embed_parsed_data(dataloader, args.feats_dir, embed_model="laionclap")
-    # create_diff_audio(dataloader, args.feats_dir)
+    if embedder_model == "humanclap":
+        embedder = HumanCLAPEmbedder()
+    elif embedder_model == "laionclap":
+        embedder = LaionClapEmbedder()
+    elif embedder_model == "msclap":
+        embedder = MSClapEmbedder(seed=args.seed)
+
+    # If only embedding quality prompts, do that and exit
+    if args.quality_prompts:
+        embed_quality_prompts(args.feats_dir, embedder)
+        return
+
+    for split in args.splits:
+        dataset = TTAPreprocessDataset(data_dir=args.data_dir, split=split)
+        dataloader = DataLoader(dataset, batch_size=args.bs, shuffle=False)
+        llm_model = args.llm_model
+
+        if llm_model == "gemini":
+            text_parser = GeminiTextParser()
+        elif llm_model == "gpt":
+            text_parser = GPTTextParser()
+        elif llm_model == "qwen":
+            text_parser = QwenTextParser()
+
+        clap_extract(dataloader, args.feats_dir, embedder=embedder)
+        clear_gpu_memory()
+
+        text_parse(dataloader, args.feats_dir, text_parser=text_parser)
+        clear_gpu_memory()
+        audio_parse(dataloader, args.feats_dir, text_parser.name)
+        clear_gpu_memory()
+        embed_parsed_data(
+            dataloader, args.feats_dir, embedder, text_parser_name=text_parser.name
+        )
+        clear_gpu_memory()
+
+        # create_diff_audio(dataloader, args.feats_dir)
 
 
 ### argument parser ###
 
 
 def arg_parser():
+    """Parse command-line arguments for preprocessing.
+
+    Returns:
+        Parsed argument namespace.
+    """
     parser = argparse.ArgumentParser(description="Audio Captioning Preprocessing")
     parser.add_argument(
         "--data_dir",
@@ -945,6 +1346,30 @@ def arg_parser():
         default=42,
         help="Seed for random number generator",
     )
+    parser.add_argument(
+        "--splits",
+        type=str,
+        nargs="+",
+        default=["test"],
+        help="Dataset splits to process (train/val/test)",
+    )
+    parser.add_argument(
+        "--clap_model",
+        type=str,
+        default="humanclap",
+        help="CLAP model to use (humanclap/laionclap/msclap)",
+    )
+    parser.add_argument(
+        "--llm_model",
+        type=str,
+        default="gpt",
+        help="LLM model to use for text parsing (gemini/gpt/qwen)",
+    )
+    parser.add_argument(
+        "--quality_prompts",
+        action="store_true",
+        help="Only embed quality prompts (skip other preprocessing)",
+    )
     args = parser.parse_args()
     return args
 
@@ -952,7 +1377,4 @@ def arg_parser():
 if __name__ == "__main__":
     args = arg_parser()
     fix_seed(args.seed)
-    splits = ["test"]
-    for split in splits:
-        args.split = split
-        main(args)
+    main(args)

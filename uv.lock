@@ -2595,7 +2595,7 @@ wheels = [
 [[package]]
 name = "sam-audio"
 version = "0.1.0"
-source = { directory = "src/sam-audio" }
+source = { editable = "src/sam-audio" }
 dependencies = [
     { name = "audiobox-aesthetics" },
     { name = "dacvae" },
@@ -3210,7 +3210,7 @@ requires-dist = [
     { name = "openai", specifier = ">=1.0.0" },
     { name = "pandas", specifier = ">=2.3.3" },
     { name = "ruff", specifier = ">=0.14.9" },
-    { name = "sam-audio", directory = "src/sam-audio" },
+    { name = "sam-audio", editable = "src/sam-audio" },
     { name = "soundfile", specifier = ">=0.13.1" },
     { name = "torch", specifier = ">=2.7.0", index = "https://download.pytorch.org/whl/cu118" },
     { name = "torchaudio", specifier = "==2.7.0", index = "https://download.pytorch.org/whl/cu118" },
