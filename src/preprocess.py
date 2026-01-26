@@ -14,8 +14,7 @@ from pydantic import BaseModel, Field
 from sam_audio import SAMAudio, SAMAudioProcessor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from transformers import (AutoModelForCausalLM, AutoTokenizer, ClapModel,
-                          ClapProcessor)
+from transformers import AutoModelForCausalLM, AutoTokenizer, ClapModel, ClapProcessor
 
 from dataset import TTADataset
 from utils.helper_func import fix_seed
@@ -381,8 +380,8 @@ class SamAudio:
         self,
         audio_file: str,
         prompts: list[str],
-        predict_spans: bool = True,
-        reranking_candidates: int = 5,
+        predict_spans: bool = False,
+        reranking_candidates: int = 1,
     ) -> list[torch.Tensor]:
         """
         Separate audio based on text prompts.
@@ -727,6 +726,9 @@ def embed_parsed_data(
     elif embed_model == "msclap":
         embedder = MSClapEmbedder()
         feats_prefix = "msclap"
+    elif embed_model == "humanclap":
+        embedder = HumanCLAPEmbedder()
+        feats_prefix = "humanclap"
 
     for batch in tqdm(dataloader, desc="Embedding Parsed Audio Segments"):
         text_ids = batch["text_id"]
@@ -871,9 +873,7 @@ def create_diff_audio(dataloader, feats_dir: str):
             # gatherを使って各時刻で最大絶対値を持つ波形の実際の値を取得
             merged_separated = torch.gather(
                 separated_audios, 0, max_abs_idx.unsqueeze(0)
-            ).squeeze(
-                0
-            )  # (C, T)
+            ).squeeze(0)  # (C, T)
 
             diff_audio = original_audio - merged_separated
             diff_audio = torch.clamp(diff_audio, -1.0, 1.0)
@@ -897,17 +897,20 @@ def main(args):
     dataset = TTAPreprocessDataset(data_dir=args.data_dir, split=args.split)
     dataloader = DataLoader(dataset, batch_size=args.bs, shuffle=False)
 
-    humanclap_extract(dataloader, args.feats_dir)
-    clear_gpu_memory()
-    laionclap_extract(dataloader, args.feats_dir)
-    clear_gpu_memory()
-    msclap_extract(dataloader, args.feats_dir, seed=args.seed)
-    clear_gpu_memory()
+    # humanclap_extract(dataloader, args.feats_dir)
+    # clear_gpu_memory()
+    # laionclap_extract(dataloader, args.feats_dir)
+    # clear_gpu_memory()
+    # msclap_extract(dataloader, args.feats_dir, seed=args.seed)
+    # clear_gpu_memory()
     # text_parse(dataloader, args.feats_dir, model = "gpt")
     # clear_gpu_memory()
     # audio_parse(dataloader, args.feats_dir)
     # clear_gpu_memory()
     # embed_parsed_data(dataloader, args.feats_dir, embed_model="msclap")
+    humanclap_extract(dataloader, args.feats_dir)
+    clear_gpu_memory()
+    # embed_parsed_data(dataloader, args.feats_dir, embed_model="humanclap")
     # clear_gpu_memory()
     # embed_parsed_data(dataloader, args.feats_dir, embed_model="laionclap")
     # create_diff_audio(dataloader, args.feats_dir)

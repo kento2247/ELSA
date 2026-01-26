@@ -423,6 +423,16 @@ class TTADataset(Dataset):
             dataset_name=dataset_name,
             file_name=text_file_name,
         )
+        data["humanclap_audio"] = self._load_pre_extracted_feats(
+            feats_name="humanclap_audio",
+            dataset_name=dataset_name,
+            file_name=audio_file_name,
+        )
+        data["humanclap_text"] = self._load_pre_extracted_feats(
+            feats_name="humanclap_text",
+            dataset_name=dataset_name,
+            file_name=text_file_name,
+        )
 
         data["msclap_parsed_audio"] = self._pad_or_truncate_feats(
             self._load_pre_extracted_feats(
@@ -451,6 +461,22 @@ class TTADataset(Dataset):
         data["laionclap_parsed_text"] = self._pad_or_truncate_feats(
             self._load_pre_extracted_feats(
                 feats_name="laionclap_parsed_text",
+                dataset_name=dataset_name,
+                file_name=text_file_name,
+                dim=laionclap_dim,
+            )
+        )
+        data["humanclap_parsed_audio"] = self._pad_or_truncate_feats(
+            self._load_pre_extracted_feats(
+                feats_name="humanclap_parsed_audio",
+                dataset_name=dataset_name,
+                file_name=text_file_name,
+                dim=laionclap_dim,
+            )
+        )
+        data["humanclap_parsed_text"] = self._pad_or_truncate_feats(
+            self._load_pre_extracted_feats(
+                feats_name="humanclap_parsed_text",
                 dataset_name=dataset_name,
                 file_name=text_file_name,
                 dim=laionclap_dim,

@@ -37,7 +37,6 @@ class TTAEvalModel(nn.Module):
         sim = sim * mask
 
         word_precision = sim.max(dim=2)[0]  # [B, S_t]
-
         word_recall = sim.max(dim=1)[0]  # [B, S_a]
 
         # precision
@@ -51,7 +50,7 @@ class TTAEvalModel(nn.Module):
         recall = (word_recall * audio_mask_float).sum(dim=1) / audio_valid_counts
 
         # F1
-        f1 = 2 * precision * recall / (precision + recall + 1e-8)
+        f1 = 2 * precision * recall / (2 * precision + recall + 1e-8)
 
         return precision, recall, f1
 
@@ -62,6 +61,7 @@ class TTAEvalModel(nn.Module):
         parsed_audio_feats: torch.Tensor,
         parsed_text_feats: torch.Tensor,
         parsed_mask: torch.Tensor,
+        subjective_metric_id: int,
     ) -> torch.Tensor:
         """
         Coarse-Grained (COGR): Global cosine similarity between audio and text embeddings.
@@ -75,6 +75,7 @@ class TTAEvalModel(nn.Module):
             parsed_audio_feats: [B, S, D] (optional)
             parsed_text_feats: [B, S, D] (optional)
             parsed_mask: Valid segment mask [B, S] (optional)
+            subjective_metric_id: 0 for REL, 1 for OVL
 
         Returns:
             Similarity scores [B]
@@ -88,7 +89,7 @@ class TTAEvalModel(nn.Module):
 
         mask = parsed_mask.to(parsed_audio_feats.device)
 
-        _, _, figr_f1 = self._greedy_matching(
+        figr_precision, figr_recall, figr_f1 = self._greedy_matching(
             audio_emb=parsed_audio_feats,
             text_emb=parsed_text_feats,
             audio_mask=mask,
@@ -97,7 +98,28 @@ class TTAEvalModel(nn.Module):
 
         # For samples with all-zero masks, use only cogr
         has_valid_mask = mask.any(dim=-1)  # [B]
-        combined_score = (cogr + figr_f1) / 2.0
+        combined_score = 0.2 * cogr + 0.8 * figr_f1
         score = torch.where(has_valid_mask, combined_score, cogr)
+
+        # snr = torch.sum(text_feats.unsqueeze(1) * parsed_audio_feats, dim=-1)
+        # snr = (snr * mask).sum(dim=-1) / mask.sum(dim=-1).clamp(min=1)
+        # # snr = (snr * mask).max(dim=-1)[0]
+        # snr = F.softmax(torch.cat([snr.unsqueeze(-1), cogr.unsqueeze(-1)], dim=-1), dim=-1)[:, 1]
+
+        # parsed_snr = torch.sum(parsed_text_feats * parsed_audio_feats, dim=-1)
+        # orig_snr = torch.sum(parsed_text_feats * audio_feats.unsqueeze(1), dim=-1)
+        # snr = F.softmax(
+        #     torch.cat([parsed_snr.unsqueeze(-1), orig_snr.unsqueeze(-1)], dim=-1),
+        #     dim=-1,
+        # )[..., 0]
+        # # snr = (snr * mask).sum(dim=-1) / mask.sum(dim=-1).clamp(min=1)
+        # snr = (snr * mask).max(dim=-1)[0]
+
+        # result = torch.zeros_like(score)
+        # for i in range(score.shape[0]):
+        #     if subjective_metric_id[i] == 0:
+        #         result[i] = score[i]
+        #     else:
+        #         result[i] = snr[i]
 
         return score

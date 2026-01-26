@@ -181,13 +181,14 @@ class TTAEval:
 
         with torch.no_grad():
             for batch in tqdm(data_loader, desc=desc):
-                laionclap_audio = batch["laionclap_audio"].to(self.device)
-                laionclap_text = batch["laionclap_text"].to(self.device)
+                laionclap_audio = batch["humanclap_audio"].to(self.device)
+                laionclap_text = batch["humanclap_text"].to(self.device)
+                subjective_metric_id = batch["subjective_metric_id"]  # 0: REL, 1: OVL
                 laionclap_parsed_audio = self._maybe_to_device(
-                    batch.get("laionclap_parsed_audio")
+                    batch.get("humanclap_parsed_audio")
                 )
                 laionclap_parsed_text = self._maybe_to_device(
-                    batch.get("laionclap_parsed_text")
+                    batch.get("humanclap_parsed_text")
                 )
                 parsed_mask = self._maybe_to_device(batch.get("parsed_mask"))
                 scores = batch["score"].numpy()
@@ -200,6 +201,7 @@ class TTAEval:
                         laionclap_parsed_audio,
                         laionclap_parsed_text,
                         parsed_mask,
+                        subjective_metric_id,
                     )
                     .squeeze(-1)
                     .cpu()
@@ -306,8 +308,9 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Audio Captioning Evaluation")
     # mode
     parser.add_argument(
-        "mode",
+        "--mode",
         type=str,
+        default="test",
         choices=["train", "test"],
         help="Mode: train or test",
     )
@@ -352,13 +355,14 @@ def parse_args():
         type=str,
         nargs="+",
         default=["relate", "audiocap", "musiccap", "aishell7b", "clotho"],
+        # default=["relate", "audiocap", "musiccap", "aishell7b"],
         help="List of dataset names to test on",
     )
     # logging
     parser.add_argument(
         "--log_wandb",
         action="store_true",
-        default=True,
+        default=False,
         help="Whether to log training with Weights & Biases",
     )
     parser.add_argument(
