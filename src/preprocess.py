@@ -73,6 +73,9 @@ class TTAPreprocessDataset(TTADataset):
         return data
 
 
+##### Abstract base classes ######
+
+
 class CLAPEmbedder(ABC):
     """Base class for CLAP embedders.
 
@@ -80,6 +83,14 @@ class CLAPEmbedder(ABC):
     """
 
     name: str
+
+    def __init__(self, name: str):
+        """Initialize CLAPEmbedder.
+
+        Args:
+            name: Name of the embedder.
+        """
+        self.name = name
 
     def embed_texts(self, texts: list[str]) -> torch.Tensor:
         """Embed texts in batch.
@@ -104,6 +115,55 @@ class CLAPEmbedder(ABC):
         raise NotImplementedError
 
 
+class AudioSeparator(ABC):
+    """Base class for audio separators.
+
+    Subclasses must implement separate_audio method.
+    """
+
+    name: str
+    sample_rate: int
+
+    def __init__(self, name: str, sample_rate: int):
+        """Initialize AudioSeparator.
+
+        Args:
+            name: Name of the audio separator.
+            sample_rate: Sample rate for audio processing.
+        """
+        self.name = name
+        self.sample_rate = sample_rate
+
+    def separate_audio(
+        self,
+        audio_file: str,
+        prompts: list[str],
+    ) -> list[torch.Tensor]:
+        """Separate audio based on text prompts.
+
+        Args:
+            audio_file: Path to audio file.
+            prompts: List of text prompts for separation.
+
+        Returns:
+            List of separated audio tensors.
+        """
+        raise NotImplementedError
+
+    def save_audio(
+        self,
+        save_path: str,
+        audio_tensor: torch.Tensor,
+        dtype: torch.dtype = torch.float32,
+    ):
+        """Save audio tensor to file"""
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        # Ensure tensor is 2D (num_channels, num_samples)
+        if audio_tensor.dim() == 1:
+            audio_tensor = audio_tensor.unsqueeze(0)
+        torchaudio.save(save_path, audio_tensor.cpu().to(dtype), self.sample_rate)
+
+
 class TextParser(ABC):
     """Base class for text parsers.
 
@@ -111,6 +171,14 @@ class TextParser(ABC):
     """
 
     name: str
+
+    def __init__(self, name: str):
+        """Initialize TextParser.
+
+        Args:
+            name: Name of the text parser.
+        """
+        self.name = name
 
     def parse_texts(self, texts: list[str]) -> list[list[str]]:
         """Parse texts in batch and return list of sound events for each text.
@@ -124,6 +192,9 @@ class TextParser(ABC):
         raise NotImplementedError
 
 
+####### Implementations of CLAP Embedders ######
+
+
 class MSClapEmbedder(CLAPEmbedder):
     """CLAP embedder using Microsoft CLAP model."""
 
@@ -134,7 +205,7 @@ class MSClapEmbedder(CLAPEmbedder):
             dtype: Data type for embeddings.
             seed: Random seed for reproducibility.
         """
-        self.name = "msclap"
+        super().__init__(name="msclap")
         self.model = CLAP(version="2023", use_cuda=True)
         self.max_text_len = 77  # MSCLAP max text length
         self.dtype = dtype
@@ -182,7 +253,7 @@ class LaionClapEmbedder(CLAPEmbedder):
         Args:
             dtype: Data type for embeddings.
         """
-        self.name = "laionclap"
+        super().__init__(name="laionclap")
         self.model = laion_clap.CLAP_Module(enable_fusion=False)
         self.model.load_ckpt("models/630k-audioset-best.pt")
         self.model.eval()
@@ -234,7 +305,7 @@ class HumanCLAPEmbedder(CLAPEmbedder):
         Args:
             dtype: Data type for embeddings.
         """
-        self.name = "humanclap"
+        super().__init__(name="humanclap")
         model_path = "sarulab-speech/human-clap-wsce-mae"
         processor_path = "laion/clap-htsat-fused"
         self.model = ClapModel.from_pretrained(model_path).to(0)
@@ -342,7 +413,7 @@ class GeminiTextParser(TextParser):
         Args:
             model_name: Name of the Gemini model to use.
         """
-        self.name = "gemini"
+        super().__init__(name="gemini")
         self.cooldown_time = cooldown_time
         api_key = os.environ.get("GEMINI_API_KEY")
         if api_key is None:
@@ -423,7 +494,7 @@ class GPTTextParser(TextParser):
         Args:
             model_name: Name of the GPT model to use.
         """
-        self.name = "gpt"
+        super().__init__(name="gpt")
         self.client = OpenAI()
         self.model_name = model_name
         self.system_prompt = (
@@ -497,7 +568,7 @@ class QwenTextParser(TextParser):
         Args:
             model_name: Name or path of the Qwen model to use.
         """
-        self.name = "qwen"
+        super().__init__(name="qwen")
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.model = AutoModelForCausalLM.from_pretrained(
@@ -679,7 +750,7 @@ Output: """
         return responses
 
 
-class SamAudio:
+class SamAudio(AudioSeparator):
     """Audio separation using SAM-Audio model."""
 
     def __init__(
@@ -691,6 +762,7 @@ class SamAudio:
             model_name: Name or path of the SAM-Audio model.
             dtype: Data type for model inference.
         """
+        super().__init__(name="sam_audio")
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.dtype = dtype
         self.model_name = model_name
@@ -735,22 +807,8 @@ class SamAudio:
             separated_audios.append(result.target[0])
         return separated_audios
 
-    def save_audio(
-        self,
-        save_path: str,
-        audio_tensor: torch.Tensor,
-        dtype: torch.dtype = torch.float32,
-    ):
-        """Save audio tensor to file"""
-        sample_rate = self.processor.audio_sampling_rate
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        # Ensure tensor is 2D (num_channels, num_samples)
-        if audio_tensor.dim() == 1:
-            audio_tensor = audio_tensor.unsqueeze(0)
-        torchaudio.save(save_path, audio_tensor.cpu().to(dtype), sample_rate)
 
-
-### utils
+####### Feature saving/loading utilities ######
 
 
 def check_all_file_exists(
@@ -835,55 +893,7 @@ def clear_gpu_memory():
     torch.cuda.empty_cache()
 
 
-### Quality prompt embeddings ###
-
-QUALITY_PROMPTS = {
-    "high": "the sound is clear and clean",
-    "low": "the sound is noisy and with artifacts",
-}
-
-# Negative/unrelated prompt for contrastive REL scoring (DISCODE-inspired)
-CONTRAST_PROMPTS = {
-    "unrelated": "silence with no sound events",
-}
-
-
-def embed_quality_prompts(feats_dir: str, embedder: CLAPEmbedder):
-    """Embed PAM-style quality prompts and contrast prompts, save to disk.
-
-    Args:
-        feats_dir: Directory to save the quality prompt embeddings.
-        embedder: CLAP embedder instance to use for text embedding.
-    """
-    save_dir = os.path.join(feats_dir, "quality_prompts")
-    os.makedirs(save_dir, exist_ok=True)
-
-    # Embed quality prompts (high/low)
-    for quality_level, prompt in QUALITY_PROMPTS.items():
-        save_path = os.path.join(save_dir, f"{quality_level}.pt")
-        if os.path.exists(save_path):
-            print(f"Quality prompt '{quality_level}' already exists at {save_path}")
-            continue
-
-        with torch.no_grad():
-            embedding = embedder.embed_texts([prompt])  # [1, D]
-        torch.save(embedding.squeeze(0), save_path)  # [D]
-        print(f"Saved quality prompt '{quality_level}' to {save_path}")
-
-    # Embed contrast prompts (unrelated) for DISCODE-style contrastive scoring
-    for contrast_type, prompt in CONTRAST_PROMPTS.items():
-        save_path = os.path.join(save_dir, f"{contrast_type}.pt")
-        if os.path.exists(save_path):
-            print(f"Contrast prompt '{contrast_type}' already exists at {save_path}")
-            continue
-
-        with torch.no_grad():
-            embedding = embedder.embed_texts([prompt])  # [1, D]
-        torch.save(embedding.squeeze(0), save_path)  # [D]
-        print(f"Saved contrast prompt '{contrast_type}' to {save_path}")
-
-
-### feature extraction main ###
+####### Main extraction and parsing functions ######
 
 
 def clap_extract(dataloader, feats_dir: str, embedder: CLAPEmbedder):
@@ -1018,9 +1028,7 @@ def audio_parse(dataloader, feats_dir: str, text_parser_name: str):
             save_dir = os.path.join(feats_dir, "separated_audio", dataset, text_id)
             os.makedirs(save_dir, exist_ok=True)
 
-            existing_wavs = [
-                f for f in os.listdir(save_dir) if f.endswith(".wav")
-            ]
+            existing_wavs = [f for f in os.listdir(save_dir) if f.endswith(".wav")]
             if len(existing_wavs) == len(audio_sources):
                 continue
             if len(audio_sources) == 0:
@@ -1056,7 +1064,9 @@ def audio_parse(dataloader, feats_dir: str, text_parser_name: str):
             os.makedirs(chunk_dir, exist_ok=True)
 
             chunk_paths = []
-            for chunk_idx, start in enumerate(range(0, total_samples, samples_per_chunk)):
+            for chunk_idx, start in enumerate(
+                range(0, total_samples, samples_per_chunk)
+            ):
                 end = min(start + samples_per_chunk, total_samples)
                 if end <= start:
                     continue
@@ -1264,6 +1274,50 @@ def create_diff_audio(dataloader, feats_dir: str):
             os.makedirs(diff_audio_dir, exist_ok=True)
             diff_audio_path = os.path.join(diff_audio_dir, f"{text_id}.wav")
             torchaudio.save(diff_audio_path, diff_audio, sep_sr)
+
+
+def embed_quality_prompts(feats_dir: str, embedder: CLAPEmbedder):
+    """Embed PAM-style quality prompts and contrast prompts, save to disk.
+
+    Args:
+        feats_dir: Directory to save the quality prompt embeddings.
+        embedder: CLAP embedder instance to use for text embedding.
+    """
+
+    QUALITY_PROMPTS = {
+        "high": "the sound is clear and clean",
+        "low": "the sound is noisy and with artifacts",
+    }
+    CONTRAST_PROMPTS = {
+        "unrelated": "silence with no sound events",
+    }
+
+    save_dir = os.path.join(feats_dir, "quality_prompts")
+    os.makedirs(save_dir, exist_ok=True)
+
+    # Embed quality prompts (high/low)
+    for quality_level, prompt in QUALITY_PROMPTS.items():
+        save_path = os.path.join(save_dir, f"{quality_level}.pt")
+        if os.path.exists(save_path):
+            print(f"Quality prompt '{quality_level}' already exists at {save_path}")
+            continue
+
+        with torch.no_grad():
+            embedding = embedder.embed_texts([prompt])  # [1, D]
+        torch.save(embedding.squeeze(0), save_path)  # [D]
+        print(f"Saved quality prompt '{quality_level}' to {save_path}")
+
+    # Embed contrast prompts (unrelated) for DISCODE-style contrastive scoring
+    for contrast_type, prompt in CONTRAST_PROMPTS.items():
+        save_path = os.path.join(save_dir, f"{contrast_type}.pt")
+        if os.path.exists(save_path):
+            print(f"Contrast prompt '{contrast_type}' already exists at {save_path}")
+            continue
+
+        with torch.no_grad():
+            embedding = embedder.embed_texts([prompt])  # [1, D]
+        torch.save(embedding.squeeze(0), save_path)  # [D]
+        print(f"Saved contrast prompt '{contrast_type}' to {save_path}")
 
 
 def main(args):
