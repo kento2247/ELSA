@@ -874,7 +874,6 @@ class CLAPSepSeparator(AudioSeparator):
                 separated_audios.append(separated[0].cpu())
         return separated_audios
 
-
 ####### Feature saving/loading utilities ######
 
 
@@ -1082,6 +1081,8 @@ def audio_separate(
         text_parser_model: Name of the text parser used for parsing.
         audio_separator: AudioSeparator instance.
     """
+    max_chunk_sec = 10
+    for batch in tqdm(dataloader, desc="Parsing Audio with SAM-Audio"):
     max_chunk_sec = 10
     for batch in tqdm(dataloader, desc="Parsing Audio with Audio Separator"):
         audio_files = batch["audio_file_path"]

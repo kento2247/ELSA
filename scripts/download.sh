@@ -53,7 +53,7 @@ cd models
 
 # Download pre-trained model
 aria2c -x10 -s10 -k1M -o 630k-audioset-best.pt https://huggingface.co/lukewys/laion_clap/resolve/main/630k-audioset-best.pt?download=true
-aria2c -x10 -s10 -k1M -o clapsep-best.ckpt https://huggingface.co/spaces/AisakaMikoto/CLAPSep/resolve/main/model/best_model.ckpt?download=true
-aria2c -x10 -s10 -k1M -o clapsep-clap.pt https://huggingface.co/spaces/AisakaMikoto/CLAPSep/resolve/main/model/music_audioset_epoch_15_esc_90.14.pt?download=true
-
+aria2c -x10 -s10 -k1M -o clap-sep-best.pt https://huggingface.co/spaces/AisakaMikoto/CLAPSep/resolve/main/model/best_model.ckpt?download=true
+aria2c -x10 -s10 -k1M -o clapsep-clap.ckpt https://huggingface.co/spaces/AisakaMikoto/CLAPSep/blob/main/model/music_audioset_epoch_15_esc_90.14.pt
+aria2c -x10 -s10 -k1M -o flow-sep-best.pt https://zenodo.org/records/13869712/files/v2_100k.ckpt?download=1
 cd ..
