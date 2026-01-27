@@ -13,16 +13,29 @@ class TTADataset(Dataset):
         self,
         data_dir: str = "data",
         features_dir: str = "features",
-        subjective_metrics: list[Literal["REL", "OVL"]] = ["REL", "OVL"],
+        subjective_metrics: list[
+            Literal[
+                "REL",
+                "OVL",
+                "IS",
+                "OS",
+                "AttributeText",
+                "AttributeAudio",
+                "OrderText",
+                "OrderAudio",
+            ]
+        ] = ["REL", "OVL"],
         dataset_names: list[
-            Literal["relate", "audiocap", "musiccap", "xacle", "aishell7b", "clotho"]
-        ] = [
-            "relate",
-            "audiocap",
-            "musiccap",
-            "aishell7b",
-            "clotho",
-        ],
+            Literal[
+                "relate",
+                "audiocap",
+                "musiccap",
+                "xacle",
+                "aishell7b",
+                "clotho",
+                "compa",
+            ]
+        ] = ["relate", "audiocap", "musiccap", "aishell7b", "clotho", "compa"],
         split: Literal["train", "val", "test"] = "train",
         bitrate: int = 16000,
         max_len: int = 16000 * 10,
@@ -52,6 +65,8 @@ class TTADataset(Dataset):
                 self._load_aishell7b_data(split, subjective_metric)
             if "clotho" in dataset_names:
                 self._load_clotho_data(split, subjective_metric)
+            if "compa" in dataset_names:
+                pass  # TODO: implement COMPA dataset loading
 
         if pre_load_features:
             for i in tqdm(
@@ -63,18 +78,33 @@ class TTADataset(Dataset):
     def _load_relate_data(self, split: str, subjective_metric: str) -> None:
         """Load RELATE dataset and split into train, val, test sets."""
         max_score = 10.0
-        if subjective_metric != "REL":
-            # RELATE dataset only supports REL subjective metric
-            return
+        if subjective_metric == "REL":
+            data_path = os.path.join(self.data_dir, "RELATE", "scores", "REL.csv")
+        elif subjective_metric == "IS":
+            data_path = os.path.join(self.data_dir, "RELATE", "scores", "IS.csv")
+        elif subjective_metric == "OS":
+            data_path = os.path.join(self.data_dir, "RELATE", "scores", "OS.csv")
+        else:
+            raise ValueError(f"Unsupported subjective metric: {subjective_metric}")
 
-        relate_rel_path = os.path.join(self.data_dir, "RELATE", "scores", "REL.csv")
-        relate_rel_data = pd.read_csv(relate_rel_path)
-
+        data = pd.read_csv(data_path)
         if split == "train" or split == "test":
-            data = relate_rel_data[relate_rel_data["in RELATE dataset"] == split]
+            data = data[data["in RELATE dataset"] == split]
         elif split == "val":
-            data = relate_rel_data[relate_rel_data["in RELATE dataset"] == "validation"]
-        data = data.reset_index(drop=True)
+            data = data[data["in RELATE dataset"] == "validation"]
+
+        # Aggregate scores by wavname
+        data = (
+            data.groupby("wavname")
+            .agg(
+                {
+                    "text": "first",
+                    "score": "mean",
+                    "audio type": "first",
+                }
+            )
+            .reset_index()
+        )
 
         for index, row in tqdm(
             data.iterrows(),
