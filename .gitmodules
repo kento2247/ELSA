@@ -1,0 +1,3 @@
+[submodule "src/CLAPSep"]
+	path = src/CLAPSep
+	url = https://huggingface.co/spaces/AisakaMikoto/CLAPSep
