@@ -18,7 +18,8 @@ from pydantic import BaseModel, Field
 from sam_audio import SAMAudio, SAMAudioProcessor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from transformers import AutoModelForCausalLM, AutoTokenizer, ClapModel, ClapProcessor
+from transformers import (AutoModelForCausalLM, AutoTokenizer, ClapModel,
+                          ClapProcessor)
 
 from CLAPSep.model.CLAPSep import CLAPSep
 from dataset import TTADataset
@@ -813,8 +814,8 @@ class SAMAudioSeparator(AudioSeparator):
 class CLAPSepSeparator(AudioSeparator):
     def __init__(
         self,
-        model_path: str = "src/CLAPSep/model/best_model.ckpt",
-        clap_model_path: str = "src/CLAPSep/model/music_audioset_epoch_15_esc_90.14.pt",
+        model_path: str = "models/clapsep-best.ckpt",
+        clap_model_path: str = "models/clapsep-clap.pt",
         dtype: torch.dtype = torch.float32,
     ):
         """Initialize CLAPSepSeparator.
