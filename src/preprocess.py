@@ -18,8 +18,7 @@ from pydantic import BaseModel, Field
 from sam_audio import SAMAudio, SAMAudioProcessor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from transformers import (AutoModelForCausalLM, AutoTokenizer, ClapModel,
-                          ClapProcessor)
+from transformers import AutoModelForCausalLM, AutoTokenizer, ClapModel, ClapProcessor
 
 from CLAPSep.model.CLAPSep import CLAPSep
 from dataset import TTADataset
@@ -861,12 +860,13 @@ class CLAPSepSeparator(AudioSeparator):
         separated_audios = []
         for prompt in prompts:
             with torch.inference_mode():
-                audio, fs = librosa.load(
-                    audio_file, sr=32000
-                )
+                audio, fs = librosa.load(audio_file, sr=32000)
+                audio_tensor = torch.tensor(
+                    audio, device=self.device, dtype=self.dtype
+                ).unsqueeze(0)
                 separated = self.model.inference_from_data(
-                    torch.tensor(audio).unsqueeze(0),
-                    pos_prompt=prompt,
+                    audio_tensor,
+                    pos_prompt=[prompt],
                     neg_prompt=[""],
                 )
                 separated_audios.append(separated[0].cpu())
@@ -1080,8 +1080,8 @@ def audio_separate(
         text_parser_model: Name of the text parser used for parsing.
         audio_separator: AudioSeparator instance.
     """
-    max_chunk_sec = 20
-    for batch in tqdm(dataloader, desc="Parsing Audio with SAM-Audio"):
+    max_chunk_sec = 10
+    for batch in tqdm(dataloader, desc="Parsing Audio with Audio Separator"):
         audio_files = batch["audio_file_path"]
         text_ids = batch["text_id"]
         datasets = batch["dataset"]
@@ -1096,7 +1096,9 @@ def audio_separate(
             )
             with open(text_path, "r") as f:
                 audio_sources = json.load(f)
-            save_dir = os.path.join(feats_dir, "separated_audio", dataset, text_id)
+            save_dir = os.path.join(
+                feats_dir, f"{audio_separator.name}_separated_audio", dataset, text_id
+            )
             os.makedirs(save_dir, exist_ok=True)
 
             existing_wavs = [f for f in os.listdir(save_dir) if f.endswith(".wav")]
@@ -1171,6 +1173,7 @@ def embed_parsed_data(
     embedder: CLAPEmbedder,
     seq_size: int = 20,
     text_parser_model: str = "gpt",
+    audio_separator_model: str = "sam_audio",
 ):
     """
     Embed parsed audio segments and text prompts.
@@ -1195,7 +1198,9 @@ def embed_parsed_data(
                 audio_sources: list[str] = json.load(f)
 
             # Load separated audio files
-            audio_dir = os.path.join(feats_dir, "separated_audio", dataset, text_id)
+            audio_dir = os.path.join(
+                feats_dir, f"{audio_separator_model}_separated_audio", dataset, text_id
+            )
             audio_files = sorted(
                 [
                     os.path.join(audio_dir, f)
@@ -1441,7 +1446,11 @@ def main(args):
         clear_gpu_memory()
 
         embed_parsed_data(
-            dataloader, args.feats_dir, embedder, text_parser_model=text_parser.name
+            dataloader,
+            args.feats_dir,
+            embedder,
+            text_parser_model=text_parser_model,
+            audio_separator_model=audio_separator_model,
         )
         clear_gpu_memory()
 

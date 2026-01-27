@@ -639,11 +639,17 @@ class HTSAT_Decoder(nn.Module):
 
         h = self.reshape_img2wav(self.inverse_patch_embed(h)).squeeze(1)
 
-        h = h[:, : spec.size(2), :]
-
         spec = spec.transpose(1, 3)
 
         spec = self.spec_norm(spec).transpose(1, 3).squeeze(1)
+
+        # Align the time dimension before concatenation. The spectrogram branch
+        # and the decoder branch can differ by one frame depending on STFT
+        # rounding, so we trim both to the minimum length to avoid shape
+        # mismatches during torch.concat.
+        time_steps = min(spec.size(1), h.size(1))
+        spec = spec[:, :time_steps, :]
+        h = h[:, :time_steps, :]
 
         h = torch.concat([spec, h], dim=-1)
 
