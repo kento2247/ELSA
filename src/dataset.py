@@ -85,7 +85,7 @@ class TTADataset(Dataset):
         elif subjective_metric == "OS":
             data_path = os.path.join(self.data_dir, "RELATE", "scores", "OS.csv")
         else:
-            raise ValueError(f"Unsupported subjective metric: {subjective_metric}")
+            return
 
         data = pd.read_csv(data_path)
         if split == "train" or split == "test":

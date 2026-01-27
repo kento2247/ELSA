@@ -21,6 +21,7 @@ dependencies = [
     "soundfile>=0.13.1",
     "google-genai>=1.57.0",
     "openai>=1.0.0",
+    "loralib>=0.1.2",
 ]
 
 [tool.uv.sources]

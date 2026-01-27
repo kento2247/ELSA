@@ -33,6 +33,20 @@ mv audiobertscore/wave_all_16k clotho
 mv audiobertscore/clotho_ovl_rel_test_set.csv clotho
 rm -rf audiobertscore
 
+# Download COMPA dataset
+gdown 1A_HDH0sO6Pp-kvdcTJrAA6MJZiItHZTQ
+gdown 1vWpq2fTcT8T7ec8pZ_EG2v29PwJPfcJm
+unzip CompA-attribute.zip
+unzip CompA-order.zip
+rm CompA-attribute.zip
+rm CompA-order.zip
+rm -rf __MACOSX
+mv CompA\ Attribute CompA_attribute
+mkdir CompA_order
+mv CompA_order_files CompA_order/
+mv CompA_order_benchmark.csv CompA_order/
+
+
 cd ..
 mkdir -p models
 cd models
