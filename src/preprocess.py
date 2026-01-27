@@ -765,14 +765,15 @@ class SAMAudioSeparator(AudioSeparator):
             model_name: Name or path of the SAM-Audio model.
             dtype: Data type for model inference.
         """
-        super().__init__(name="sam_audio")
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.dtype = dtype
         self.model_name = model_name
         self.model = SAMAudio.from_pretrained(model_name)
         self.processor = SAMAudioProcessor.from_pretrained(model_name)
         self.model = self.model.eval().to(self.device, self.dtype)
-        self.sample_rate = self.processor.audio_sampling_rate
+        super().__init__(
+            name="sam_audio", sample_rate=self.processor.audio_sampling_rate
+        )
 
     def separate_audio(
         self,
@@ -814,8 +815,8 @@ class SAMAudioSeparator(AudioSeparator):
 class CLAPSepSeparator(AudioSeparator):
     def __init__(
         self,
-        model_path: str = "src/CLAPSep/model/best_model.ckpt",
-        clap_model_path: str = "src/CLAPSep/model/music_audioset_epoch_15_esc_90.14.pt",
+        model_path: str = "models/clapsep-best.ckpt",
+        clap_model_path: str = "models/clapsep-clap.pt",
         dtype: torch.dtype = torch.float32,
     ):
         """Initialize CLAPSepSeparator.
@@ -824,7 +825,6 @@ class CLAPSepSeparator(AudioSeparator):
             model_path: Path to the CLAPSep model checkpoint.
             dtype: Data type for model inference.
         """
-        super().__init__(name="clapsep", sample_rate=32000)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.dtype = dtype
         model_config = {
@@ -844,6 +844,7 @@ class CLAPSepSeparator(AudioSeparator):
         self.model.load_state_dict(checkpoint, strict=False)
         self.model.eval()
         self.model.to(self.device, self.dtype)
+        super().__init__(name="clapsep", sample_rate=32000)
 
     def separate_audio(
         self,
@@ -861,12 +862,13 @@ class CLAPSepSeparator(AudioSeparator):
         separated_audios = []
         for prompt in prompts:
             with torch.inference_mode():
-                audio, fs = librosa.load(
-                    audio_file, sr=32000
-                )
+                audio, fs = librosa.load(audio_file, sr=32000)
+                audio_tensor = torch.tensor(
+                    audio, device=self.device, dtype=self.dtype
+                ).unsqueeze(0)
                 separated = self.model.inference_from_data(
-                    torch.tensor(audio).unsqueeze(0),
-                    pos_prompt=prompt,
+                    audio_tensor,
+                    pos_prompt=[prompt],
                     neg_prompt=[""],
                 )
                 separated_audios.append(separated[0].cpu())
@@ -1080,8 +1082,8 @@ def audio_separate(
         text_parser_model: Name of the text parser used for parsing.
         audio_separator: AudioSeparator instance.
     """
-    max_chunk_sec = 20
-    for batch in tqdm(dataloader, desc="Parsing Audio with SAM-Audio"):
+    max_chunk_sec = 10
+    for batch in tqdm(dataloader, desc="Parsing Audio with Audio Separator"):
         audio_files = batch["audio_file_path"]
         text_ids = batch["text_id"]
         datasets = batch["dataset"]
@@ -1096,7 +1098,9 @@ def audio_separate(
             )
             with open(text_path, "r") as f:
                 audio_sources = json.load(f)
-            save_dir = os.path.join(feats_dir, "separated_audio", dataset, text_id)
+            save_dir = os.path.join(
+                feats_dir, f"{audio_separator.name}_separated_audio", dataset, text_id
+            )
             os.makedirs(save_dir, exist_ok=True)
 
             existing_wavs = [f for f in os.listdir(save_dir) if f.endswith(".wav")]
@@ -1123,7 +1127,7 @@ def audio_separate(
 
             # Long audio: chunk -> SAM -> stitch per prompt
             audio, sr = torchaudio.load(audio_file)
-            target_sr = audio_separator.processor.audio_sampling_rate
+            target_sr = audio_separator.sample_rate
             if sr != target_sr:
                 resampler = torchaudio.transforms.Resample(sr, target_sr)
                 audio = resampler(audio)
@@ -1171,6 +1175,7 @@ def embed_parsed_data(
     embedder: CLAPEmbedder,
     seq_size: int = 20,
     text_parser_model: str = "gpt",
+    audio_separator_model: str = "sam_audio",
 ):
     """
     Embed parsed audio segments and text prompts.
@@ -1195,7 +1200,9 @@ def embed_parsed_data(
                 audio_sources: list[str] = json.load(f)
 
             # Load separated audio files
-            audio_dir = os.path.join(feats_dir, "separated_audio", dataset, text_id)
+            audio_dir = os.path.join(
+                feats_dir, f"{audio_separator_model}_separated_audio", dataset, text_id
+            )
             audio_files = sorted(
                 [
                     os.path.join(audio_dir, f)
@@ -1439,7 +1446,11 @@ def main(args):
         clear_gpu_memory()
 
         embed_parsed_data(
-            dataloader, args.feats_dir, embedder, text_parser_model=text_parser.name
+            dataloader,
+            args.feats_dir,
+            embedder,
+            text_parser_model=text_parser_model,
+            audio_separator_model=audio_separator_model,
         )
         clear_gpu_memory()
 

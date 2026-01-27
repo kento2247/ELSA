@@ -91,12 +91,14 @@ class CLAPSep(nn.Module):
         pred = self.istft(mag_y * cos_y, mag_y * sin_y, length=length)
         return pred
 
-    def inference_from_data(self, mixed, embed_pos, embed_neg):
+    def inference_from_data(self, mixed, pos_prompt, neg_prompt):
         self.eval()
         real, imag = self.stft(mixed)
         mag, cos, sin = magphase(real, imag)
         self.features.append(mag)
         with torch.no_grad():
+            embed_pos = self.clap_model.get_text_embedding(pos_prompt, use_tensor=True)
+            embed_neg = self.clap_model.get_text_embedding(neg_prompt, use_tensor=True)
             embed = torch.nn.functional.normalize(
                 torch.concat([embed_pos, embed_neg], dim=-1), dim=-1
             )
