@@ -764,14 +764,15 @@ class SAMAudioSeparator(AudioSeparator):
             model_name: Name or path of the SAM-Audio model.
             dtype: Data type for model inference.
         """
-        super().__init__(name="sam_audio")
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.dtype = dtype
         self.model_name = model_name
         self.model = SAMAudio.from_pretrained(model_name)
         self.processor = SAMAudioProcessor.from_pretrained(model_name)
         self.model = self.model.eval().to(self.device, self.dtype)
-        self.sample_rate = self.processor.audio_sampling_rate
+        super().__init__(
+            name="sam_audio", sample_rate=self.processor.audio_sampling_rate
+        )
 
     def separate_audio(
         self,
@@ -823,7 +824,6 @@ class CLAPSepSeparator(AudioSeparator):
             model_path: Path to the CLAPSep model checkpoint.
             dtype: Data type for model inference.
         """
-        super().__init__(name="clapsep", sample_rate=32000)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.dtype = dtype
         model_config = {
@@ -843,6 +843,7 @@ class CLAPSepSeparator(AudioSeparator):
         self.model.load_state_dict(checkpoint, strict=False)
         self.model.eval()
         self.model.to(self.device, self.dtype)
+        super().__init__(name="clapsep", sample_rate=32000)
 
     def separate_audio(
         self,
@@ -1125,7 +1126,7 @@ def audio_separate(
 
             # Long audio: chunk -> SAM -> stitch per prompt
             audio, sr = torchaudio.load(audio_file)
-            target_sr = audio_separator.processor.audio_sampling_rate
+            target_sr = audio_separator.sample_rate
             if sr != target_sr:
                 resampler = torchaudio.transforms.Resample(sr, target_sr)
                 audio = resampler(audio)
