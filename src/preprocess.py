@@ -862,7 +862,7 @@ class CLAPSepSeparator(AudioSeparator):
         for prompt in prompts:
             with torch.inference_mode():
                 audio, fs = librosa.load(
-                    "./510_25.221254348754883_mixture.wav", sr=32000
+                    audio_file, sr=32000
                 )
                 separated = self.model.inference_from_data(
                     torch.tensor(audio).unsqueeze(0),
