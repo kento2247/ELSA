@@ -18,11 +18,11 @@ from pydantic import BaseModel, Field
 from sam_audio import SAMAudio, SAMAudioProcessor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from transformers import (AutoModelForCausalLM, AutoTokenizer, ClapModel,
-                          ClapProcessor)
+from transformers import AutoModelForCausalLM, AutoTokenizer, ClapModel, ClapProcessor
 
 from CLAPSep.model.CLAPSep import CLAPSep
 from dataset import TTADataset
+from SoloAudio.solo_audio_ins import SoloAudio
 from utils.helper_func import fix_seed
 
 ### laion clap fix ###
@@ -594,19 +594,19 @@ class QwenTextParser(TextParser):
         """
         system_prompt = "Output only a JSON array of strings."
         user_prompt = f"""Split the caption into a list of distinct sound events.
-Preserve all modifiers (adjectives, adverbs, and descriptive phrases).
-Do NOT include any temporal or sequential information (e.g., order, timing, repetition, before/after).
-Do NOT output duplicate or semantically overlapping sound events.
-If the same sound event appears multiple times, keep only the most informative occurrence.
+        Preserve all modifiers (adjectives, adverbs, and descriptive phrases).
+        Do NOT include any temporal or sequential information (e.g., order, timing, repetition, before/after).
+        Do NOT output duplicate or semantically overlapping sound events.
+        If the same sound event appears multiple times, keep only the most informative occurrence.
 
-Caption:
-{text}
+        Caption:
+        {text}
 
-Example:
-Caption: Birds chirp loudly in the distance; a person talks nearby; more chirping.
-Output: ["Birds chirp loudly in the distance", "A person talks nearby"]
+        Example:
+        Caption: Birds chirp loudly in the distance; a person talks nearby; more chirping.
+        Output: ["Birds chirp loudly in the distance", "A person talks nearby"]
 
-Output: """
+        Output: """
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
@@ -874,6 +874,57 @@ class CLAPSepSeparator(AudioSeparator):
                 separated_audios.append(separated[0].cpu())
         return separated_audios
 
+
+class SoloAudioSeparator(AudioSeparator):
+    def __init__(
+        self,
+        clap_model_path: str = "laion/larger_clap_general",
+        autoencoder_path: str = "models/soloaudio_vae.pt",
+        soloaudio_path: str = "models/soloaudio.pt",
+        sample_rate: int = 24000,
+        dtype: torch.dtype = torch.float32,
+    ):
+        """Initialize SoloAudioSeparator.
+
+        Args:
+            clap_model_path: Path to the CLAP model checkpoint.
+            autoencoder_path: Path to the autoencoder model checkpoint.
+            soloaudio_path: Path to the soloaudio model checkpoint.
+            dtype: Data type for model inference.
+        """
+        super().__init__(name="soloaudio", sample_rate=sample_rate)
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.dtype = dtype
+
+        self.model = SoloAudio(clap_model_path, autoencoder_path, soloaudio_path)
+        self.model.eval()
+        self.model.to(self.device, self.dtype)
+
+    def separate_audio(
+        self,
+        audio_file: str,
+        prompts: list[str],
+    ) -> list[torch.Tensor]:
+        """
+        Separate audio based on text prompts.
+        Args:
+            audio_file: Path to audio file.
+            prompts: List of text prompts for separation.
+        Returns:
+            List of separated audio tensors.
+        """
+        separated_audios = []
+        for prompt in prompts:
+            with torch.no_grad():
+                audio, _ = librosa.load(audio_file, sr=self.sample_rate)
+                audio_tensor = torch.tensor(
+                    audio, device=self.device, dtype=self.dtype
+                ).unsqueeze(0)
+                separated_audio = self.model(audio_tensor, prompt).squeeze(0)
+                separated_audios.append(separated_audio.cpu())
+        return separated_audios
+
+
 ####### Feature saving/loading utilities ######
 
 
@@ -1082,8 +1133,6 @@ def audio_separate(
         audio_separator: AudioSeparator instance.
     """
     max_chunk_sec = 10
-    for batch in tqdm(dataloader, desc="Parsing Audio with SAM-Audio"):
-    max_chunk_sec = 10
     for batch in tqdm(dataloader, desc="Parsing Audio with Audio Separator"):
         audio_files = batch["audio_file_path"]
         text_ids = batch["text_id"]
@@ -1097,7 +1146,7 @@ def audio_separate(
                 dataset,
                 f"{text_id}.json",
             )
-            with open(text_path, "r") as f:
+            with open(text_path, "r", encoding="utf-8") as f:
                 audio_sources = json.load(f)
             save_dir = os.path.join(
                 feats_dir, f"{audio_separator.name}_separated_audio", dataset, text_id
@@ -1197,7 +1246,7 @@ def embed_parsed_data(
                 dataset,
                 f"{text_id}.json",
             )
-            with open(text_path, "r") as f:
+            with open(text_path, "r", encoding="utf-8") as f:
                 audio_sources: list[str] = json.load(f)
 
             # Load separated audio files
@@ -1441,6 +1490,8 @@ def main(args):
             audio_separator = SAMAudioSeparator()
         elif audio_separator_model == "clapsep":
             audio_separator = CLAPSepSeparator()
+        elif audio_separator_model == "soloaudio":
+            audio_separator = SoloAudioSeparator()
 
         audio_separate(dataloader, args.feats_dir, audio_separator, text_parser_model)
         del audio_separator
@@ -1455,7 +1506,7 @@ def main(args):
         )
         clear_gpu_memory()
 
-        # create_diff_audio(dataloader, args.feats_dir)
+        create_diff_audio(dataloader, args.feats_dir)
 
 
 ### argument parser ###
@@ -1515,7 +1566,7 @@ def arg_parser():
         "--audio_separator_model",
         type=str,
         default="sam_audio",
-        help="Audio separator model to use (sam_audio/clapsep)",
+        help="Audio separator model to use (sam_audio/clapsep/soloaudio)",
     )
     parser.add_argument(
         "--quality_prompts",

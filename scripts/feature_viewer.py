@@ -17,7 +17,7 @@ from flask import Flask, render_template_string, request, send_file
 DATA_DIR = Path(__file__).parent.parent / "data"
 FEATURES_DIR = DATA_DIR / "features"
 PARSED_TEXTS_DIR = FEATURES_DIR / "gpt_parsed_texts"
-SEPARATED_AUDIO_DIR = FEATURES_DIR / "separated_audio"
+SEPARATED_AUDIO_DIR = FEATURES_DIR / "soloaudio_separated_audio"
 DIFF_AUDIO_DIR = FEATURES_DIR / "diff_audio"
 
 DATASETS = ["relate", "audiocap", "musiccap", "aishell7b"]

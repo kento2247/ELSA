@@ -55,5 +55,8 @@ cd models
 aria2c -x10 -s10 -k1M -o 630k-audioset-best.pt https://huggingface.co/lukewys/laion_clap/resolve/main/630k-audioset-best.pt?download=true
 aria2c -x10 -s10 -k1M -o clap-sep-best.pt https://huggingface.co/spaces/AisakaMikoto/CLAPSep/resolve/main/model/best_model.ckpt?download=true
 aria2c -x10 -s10 -k1M -o clapsep-clap.ckpt https://huggingface.co/spaces/AisakaMikoto/CLAPSep/blob/main/model/music_audioset_epoch_15_esc_90.14.pt
-aria2c -x10 -s10 -k1M -o flow-sep-best.pt https://zenodo.org/records/13869712/files/v2_100k.ckpt?download=1
+
+aria2c -x10 -s10 -k1M -o soloaudio_vae.pt https://huggingface.co/westbrook/SoloAudio/resolve/main/audio-vae.pt?download=true 
+aria2c -x10 -s10 -k1M -o soloaudio.pt https://huggingface.co/westbrook/SoloAudio/resolve/main/soloaudio_v2.pt?download=true
+
 cd ..
