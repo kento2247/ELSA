@@ -17,7 +17,7 @@ from flask import Flask, render_template_string, request, send_file
 DATA_DIR = Path(__file__).parent.parent / "data"
 FEATURES_DIR = DATA_DIR / "features"
 PARSED_TEXTS_DIR = FEATURES_DIR / "gpt_parsed_texts"
-SEPARATED_AUDIO_DIR = FEATURES_DIR / "soloaudio_separated_audio"
+SEPARATED_AUDIO_DIR = FEATURES_DIR / "clapsep_separated_audio"
 DIFF_AUDIO_DIR = FEATURES_DIR / "diff_audio"
 
 DATASETS = ["relate", "audiocap", "musiccap", "aishell7b"]
@@ -603,7 +603,9 @@ def load_aishell7b_metadata() -> dict[str, dict]:
     # Load each split
     split_mapping = {"train": "train", "val": "dev", "test": "test"}
     for split, split_name in split_mapping.items():
-        mos_list_path = DATA_DIR / "MusicEval-full" / "sets" / f"{split_name}_mos_list.txt"
+        mos_list_path = (
+            DATA_DIR / "MusicEval-full" / "sets" / f"{split_name}_mos_list.txt"
+        )
         if not mos_list_path.exists():
             continue
 
