@@ -20,6 +20,8 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, ClapModel, ClapProcessor
 
+from AudioSep.models.audiosep import AudioSep as AudioSepModel
+from AudioSep.utils import get_ss_model
 from CLAPSep.model.CLAPSep import CLAPSep
 from dataset import TTADataset
 from SoloAudio.solo_audio_ins import SoloAudio
@@ -925,6 +927,62 @@ class SoloAudioSeparator(AudioSeparator):
         return separated_audios
 
 
+class AudioSepSeparator(AudioSeparator):
+    def __init__(
+        self,
+        model_config_path: str = "src/AudioSep/config/audiosep_base.yaml",
+        model_name: str = "nielsr/audiosep-demo",
+        sample_rate: int = 32000,
+        dtype: torch.dtype = torch.float32,
+    ):
+        """Initialize AudioSepSeparator.
+
+        Args:
+            model_config_path: Path to the model configuration file.
+            model_name: Name of the model to load.
+            dtype: Data type for model inference.
+        """
+        super().__init__(name="audiosep", sample_rate=sample_rate)
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.dtype = dtype
+        ss_model = get_ss_model(model_config_path)
+        self.model = AudioSepModel.from_pretrained(model_name, ss_model=ss_model)
+        self.model.eval()
+        self.model.to(self.device, self.dtype)
+
+    def separate_audio(
+        self,
+        audio_file: str,
+        prompts: list[str],
+    ) -> list[torch.Tensor]:
+        """
+        Separate audio based on text prompts.
+        Args:
+            audio_file: Path to audio file.
+            prompts: List of text prompts for separation.
+        Returns:
+            List of separated audio tensors.
+        """
+        separated_audios = []
+        for prompt in prompts:
+            with torch.no_grad():
+                audio, _ = librosa.load(audio_file, sr=self.sample_rate, mono=True)
+                conditions = self.model.query_encoder.get_query_embed(
+                    modality="text", text=[prompt], device=self.device
+                )
+                input_dict = {
+                    "mixture": torch.Tensor(audio)[None, None, :].to(self.device),
+                    "condition": conditions,
+                }
+                # separated_audio = self.model.ss_model.chunk_inference(input_dict)
+                # separated_audio = torch.tensor(separated_audio.squeeze(0))
+                sep_segment = self.model.ss_model(input_dict)["waveform"]
+                separated_audio = sep_segment.squeeze(0).squeeze(0).data.cpu()
+                # separated_audio = torch.round(separated_audio * 32767)
+                separated_audios.append(separated_audio.cpu())
+        return separated_audios
+
+
 ####### Feature saving/loading utilities ######
 
 
@@ -1390,9 +1448,7 @@ def create_diff_audio(dataloader, feats_dir: str):
             # Use gather to get the actual waveform values with maximum absolute value at each time step
             merged_separated = torch.gather(
                 separated_audios, 0, max_abs_idx.unsqueeze(0)
-            ).squeeze(
-                0
-            )  # (C, T)
+            ).squeeze(0)  # (C, T)
 
             diff_audio = original_audio - merged_separated
             diff_audio = torch.clamp(diff_audio, -1.0, 1.0)
@@ -1494,6 +1550,8 @@ def main(args):
             audio_separator = CLAPSepSeparator()
         elif audio_separator_model == "soloaudio":
             audio_separator = SoloAudioSeparator()
+        elif audio_separator_model == "audiosep":
+            audio_separator = AudioSepSeparator()
 
         audio_separate(dataloader, args.feats_dir, audio_separator, text_parser_model)
         del audio_separator
@@ -1568,7 +1626,7 @@ def arg_parser():
         "--audio_separator_model",
         type=str,
         default="sam_audio",
-        help="Audio separator model to use (sam_audio/clapsep/soloaudio)",
+        help="Audio separator model to use (sam_audio/clapsep/soloaudio/audiosep)",
     )
     parser.add_argument(
         "--quality_prompts",

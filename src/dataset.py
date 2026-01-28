@@ -434,61 +434,61 @@ class TTADataset(Dataset):
         )
         dataset_name = data["dataset"]
 
-        # data["audio"] = self._load_wav(data["audio_file_path"])
+        data["audio"] = self._load_wav(data["audio_file_path"])
 
-        # data["msclap_audio"] = self._load_pre_extracted_feats(
-        #     feats_name="msclap_audio",
-        #     dataset_name=dataset_name,
-        #     file_name=audio_file_name,
-        # )
-        # data["msclap_text"] = self._load_pre_extracted_feats(
-        #     feats_name="msclap_text",
-        #     dataset_name=dataset_name,
-        #     file_name=text_file_name,
-        # )
-        # data["msclap_parsed_audio"] = self._pad_or_truncate_feats(
-        #     self._load_pre_extracted_feats(
-        #         feats_name="msclap_parsed_audio",
-        #         dataset_name=dataset_name,
-        #         file_name=text_file_name,
-        #         dim=msclap_dim,
-        #     )
-        # )
-        # data["msclap_parsed_text"] = self._pad_or_truncate_feats(
-        #     self._load_pre_extracted_feats(
-        #         feats_name="msclap_parsed_text",
-        #         dataset_name=dataset_name,
-        #         file_name=text_file_name,
-        #         dim=msclap_dim,
-        #     )
-        # )
+        data["msclap_audio"] = self._load_pre_extracted_feats(
+            feats_name="msclap_audio",
+            dataset_name=dataset_name,
+            file_name=audio_file_name,
+        )
+        data["msclap_text"] = self._load_pre_extracted_feats(
+            feats_name="msclap_text",
+            dataset_name=dataset_name,
+            file_name=text_file_name,
+        )
+        data["msclap_parsed_audio"] = self._pad_or_truncate_feats(
+            self._load_pre_extracted_feats(
+                feats_name="msclap_parsed_audio",
+                dataset_name=dataset_name,
+                file_name=text_file_name,
+                dim=msclap_dim,
+            )
+        )
+        data["msclap_parsed_text"] = self._pad_or_truncate_feats(
+            self._load_pre_extracted_feats(
+                feats_name="msclap_parsed_text",
+                dataset_name=dataset_name,
+                file_name=text_file_name,
+                dim=msclap_dim,
+            )
+        )
 
-        # data["laionclap_audio"] = self._load_pre_extracted_feats(
-        #     feats_name="laionclap_audio",
-        #     dataset_name=dataset_name,
-        #     file_name=audio_file_name,
-        # )
-        # data["laionclap_text"] = self._load_pre_extracted_feats(
-        #     feats_name="laionclap_text",
-        #     dataset_name=dataset_name,
-        #     file_name=text_file_name,
-        # )
-        # data["laionclap_parsed_audio"] = self._pad_or_truncate_feats(
-        #     self._load_pre_extracted_feats(
-        #         feats_name="laionclap_parsed_audio",
-        #         dataset_name=dataset_name,
-        #         file_name=text_file_name,
-        #         dim=laionclap_dim,
-        #     )
-        # )
-        # data["laionclap_parsed_text"] = self._pad_or_truncate_feats(
-        #     self._load_pre_extracted_feats(
-        #         feats_name="laionclap_parsed_text",
-        #         dataset_name=dataset_name,
-        #         file_name=text_file_name,
-        #         dim=laionclap_dim,
-        #     )
-        # )
+        data["laionclap_audio"] = self._load_pre_extracted_feats(
+            feats_name="laionclap_audio",
+            dataset_name=dataset_name,
+            file_name=audio_file_name,
+        )
+        data["laionclap_text"] = self._load_pre_extracted_feats(
+            feats_name="laionclap_text",
+            dataset_name=dataset_name,
+            file_name=text_file_name,
+        )
+        data["laionclap_parsed_audio"] = self._pad_or_truncate_feats(
+            self._load_pre_extracted_feats(
+                feats_name="laionclap_parsed_audio",
+                dataset_name=dataset_name,
+                file_name=text_file_name,
+                dim=laionclap_dim,
+            )
+        )
+        data["laionclap_parsed_text"] = self._pad_or_truncate_feats(
+            self._load_pre_extracted_feats(
+                feats_name="laionclap_parsed_text",
+                dataset_name=dataset_name,
+                file_name=text_file_name,
+                dim=laionclap_dim,
+            )
+        )
 
         data["humanclap_audio"] = self._load_pre_extracted_feats(
             feats_name="humanclap_audio",

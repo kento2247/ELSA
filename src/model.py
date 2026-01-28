@@ -66,7 +66,7 @@ class TTAEvalModel(nn.Module):
 
     def _confidence_weight(self, mask: torch.Tensor) -> torch.Tensor:
         valid_counts = mask.float().sum(dim=-1)
-        confidence = torch.sigmoid((valid_counts - 2) * 0.5)
+        confidence = 0.4**valid_counts
         confidence = torch.where(
             valid_counts > 0, confidence, torch.zeros_like(confidence)
         )
@@ -112,8 +112,8 @@ class TTAEvalModel(nn.Module):
         mask = mask.to(sim.device)
         sim = sim * mask
 
-        word_precision = sim.max(dim=2)[0]
-        word_recall = sim.max(dim=1)[0]
+        word_precision = sim.max(dim=2)[0] - sim.mean(dim=2)[0]
+        word_recall = sim.max(dim=1)[0] - sim.mean(dim=1)[0]
 
         text_mask_float = text_mask.float().to(word_precision.device)
         text_valid_counts = text_mask_float.sum(dim=1).clamp(min=1.0)
@@ -161,9 +161,9 @@ class TTAEvalModel(nn.Module):
 
         if use_adaptive_fusion:
             confidence = self._confidence_weight(mask)
-            cogr_w = 0.2 + 0.3 * (1 - confidence)
-            figr_w = 0.8 - 0.3 * (1 - confidence)
-            figr_combined = 0.7 * figr_f1 + 0.15 * precision + 0.15 * recall
+            cogr_w = confidence
+            figr_w = 1 - confidence
+            figr_combined = figr_f1
         else:
             cogr_w = self.cogr_weight
             figr_w = self.figr_weight

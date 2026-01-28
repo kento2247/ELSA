@@ -26,6 +26,7 @@ dependencies = [
     "diffusers>=0.36.0",
     "alias-free-torch>=0.0.6",
     "vector-quantize-pytorch>=1.27.20",
+    "lightning>=2.6.0",
 ]
 
 [tool.uv.sources]
