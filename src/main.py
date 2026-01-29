@@ -40,6 +40,7 @@ class TTAEval:
         # logging
         log_wandb: bool,
         save_qualitative: bool,
+        parse_event_count: str = "all",
     ):
         self.data_dir = data_dir
         self.features_dir = features_dir
@@ -51,6 +52,7 @@ class TTAEval:
         self.main_metric = main_metric
         self.subjective_metrics = subjective_metrics
         self.test_dataset_names = test_dataset_names
+        self.parse_event_count = parse_event_count
         self.log_wandb = log_wandb
         self.save_qualitative = save_qualitative
 
@@ -174,10 +176,8 @@ class TTAEval:
             clap_parsed_audio = self._maybe_to_device(
                 batch.get("humanclap_parsed_audio")
             )
-            clap_parsed_text = self._maybe_to_device(
-                batch.get("humanclap_parsed_text")
-            )
-            parsed_mask = self._maybe_to_device(batch.get("parsed_mask"))
+            clap_parsed_text = self._maybe_to_device(batch.get("humanclap_parsed_text"))
+            parsed_mask = self._maybe_to_device(batch.get("humanclap_parsed_mask"))
             metric_id = batch.get("subjective_metric_id")
             if metric_id is not None:
                 metric_id = metric_id.to(self.device)
@@ -218,7 +218,7 @@ class TTAEval:
                 clap_parsed_text = self._maybe_to_device(
                     batch.get("humanclap_parsed_text")
                 )
-                parsed_mask = self._maybe_to_device(batch.get("parsed_mask"))
+                parsed_mask = self._maybe_to_device(batch.get("humanclap_parsed_mask"))
                 metric_id = batch.get("subjective_metric_id")
                 if metric_id is not None:
                     metric_id = metric_id.to(self.device)
@@ -239,12 +239,58 @@ class TTAEval:
                     .numpy()
                 )
 
+                # Filter by parse event count
+                if self.parse_event_count != "all" and parsed_mask is not None:
+                    # Calculate event count for each sample in the batch
+                    event_counts = parsed_mask.sum(dim=-1).cpu().numpy()  # [batch_size]
+
+                    # Create filter mask based on parse_event_count
+                    if self.parse_event_count == "1":
+                        filter_mask = event_counts == 1
+                    elif self.parse_event_count == "2":
+                        filter_mask = event_counts == 2
+                    elif self.parse_event_count == "3+":
+                        filter_mask = event_counts >= 3
+                    else:
+                        filter_mask = np.ones_like(event_counts, dtype=bool)
+
+                    # Apply filter
+                    preds = preds[filter_mask]
+                    scores = scores[filter_mask]
+                    audio_file_path = [
+                        audio_file_path[i]
+                        for i in range(len(audio_file_path))
+                        if filter_mask[i]
+                    ]
+
                 all_preds.append(preds)
                 all_scores.append(scores)
                 all_audio_file_paths.extend(audio_file_path)
 
-        all_preds = np.concatenate(all_preds)
-        all_scores = np.concatenate(all_scores)
+        # Filter out empty arrays and concatenate
+        all_preds = [p for p in all_preds if len(p) > 0]
+        all_scores = [s for s in all_scores if len(s) > 0]
+
+        if len(all_preds) > 0:
+            all_preds = np.concatenate(all_preds)
+            all_scores = np.concatenate(all_scores)
+        else:
+            all_preds = np.array([])
+            all_scores = np.array([])
+            print(
+                f"Warning: No samples found matching parse_event_count={self.parse_event_count}"
+            )
+            return {
+                "metrics": {
+                    "mse": float("nan"),
+                    "pearson": float("nan"),
+                    "spearman": float("nan"),
+                    "kendall_tau": float("nan"),
+                },
+                "y_list": all_scores,
+                "y_hat_list": all_preds,
+                "audio_file_paths": all_audio_file_paths,
+            }
 
         return {
             "metrics": {
@@ -396,6 +442,13 @@ def parse_args():
         # default=["relate", "audiocap", "musiccap", "aishell7b"],
         help="List of dataset names to test on",
     )
+    parser.add_argument(
+        "--parse_event_count",
+        type=str,
+        default="all",
+        choices=["all", "1", "2", "3+"],
+        help="Filter samples by parse event count: all, 1, 2, or 3+",
+    )
     # logging
     parser.add_argument(
         "--log_wandb",
@@ -430,6 +483,7 @@ if __name__ == "__main__":
         main_metric=args.main_metric,
         subjective_metrics=args.subjective_metrics,
         test_dataset_names=args.test_dataset_names,
+        parse_event_count=args.parse_event_count,
         log_wandb=args.log_wandb,
         save_qualitative=args.save_qualitative,
     )

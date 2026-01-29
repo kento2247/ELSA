@@ -1613,7 +1613,7 @@ def arg_parser():
     parser.add_argument(
         "--clap_model",
         type=str,
-        default="humanclap",
+        default="laionclap",
         help="CLAP model to use (humanclap/laionclap/msclap)",
     )
     parser.add_argument(

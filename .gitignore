@@ -3,4 +3,3 @@ models
 __pycache__
 wandb
 .checkpoints
-notebooks

@@ -27,6 +27,8 @@ dependencies = [
     "alias-free-torch>=0.0.6",
     "vector-quantize-pytorch>=1.27.20",
     "lightning>=2.6.0",
+    "ipykernel>=7.1.0",
+    "seaborn>=0.13.2",
 ]
 
 [tool.uv.sources]

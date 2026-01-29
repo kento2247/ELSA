@@ -434,7 +434,7 @@ class TTADataset(Dataset):
         )
         dataset_name = data["dataset"]
 
-        data["audio"] = self._load_wav(data["audio_file_path"])
+        # data["audio"] = self._load_wav(data["audio_file_path"])
 
         data["msclap_audio"] = self._load_pre_extracted_feats(
             feats_name="msclap_audio",
@@ -460,6 +460,13 @@ class TTADataset(Dataset):
                 dataset_name=dataset_name,
                 file_name=text_file_name,
                 dim=msclap_dim,
+            )
+        )
+        data["msclap_parsed_mask"] = self._pad_or_truncate_mask(
+            self._load_pre_extracted_mask(
+                feats_name="msclap_parsed_mask",
+                dataset_name=dataset_name,
+                file_name=text_file_name,
             )
         )
 
@@ -489,6 +496,13 @@ class TTADataset(Dataset):
                 dim=laionclap_dim,
             )
         )
+        data["laionclap_parsed_mask"] = self._pad_or_truncate_mask(
+            self._load_pre_extracted_mask(
+                feats_name="laionclap_parsed_mask",
+                dataset_name=dataset_name,
+                file_name=text_file_name,
+            )
+        )
 
         data["humanclap_audio"] = self._load_pre_extracted_feats(
             feats_name="humanclap_audio",
@@ -516,10 +530,9 @@ class TTADataset(Dataset):
                 dim=laionclap_dim,
             )
         )
-
-        data["parsed_mask"] = self._pad_or_truncate_mask(
+        data["humanclap_parsed_mask"] = self._pad_or_truncate_mask(
             self._load_pre_extracted_mask(
-                feats_name="parsed_mask",
+                feats_name="humanclap_parsed_mask",
                 dataset_name=dataset_name,
                 file_name=text_file_name,
             )
