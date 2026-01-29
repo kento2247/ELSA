@@ -80,18 +80,28 @@ class TTADataset(Dataset):
         max_score = 10.0
         if subjective_metric == "REL":
             data_path = os.path.join(self.data_dir, "RELATE", "scores", "REL.csv")
-        elif subjective_metric == "IS":
-            data_path = os.path.join(self.data_dir, "RELATE", "scores", "IS.csv")
-        elif subjective_metric == "OS":
-            data_path = os.path.join(self.data_dir, "RELATE", "scores", "OS.csv")
+            data = pd.read_csv(data_path)
+            if split == "train" or split == "test":
+                data = data[data["in RELATE dataset"] == split]
+            elif split == "val":
+                data = data[data["in RELATE dataset"] == "validation"]
         else:
-            return
+            if subjective_metric == "IS":
+                data_path = os.path.join(self.data_dir, "RELATE", "scores", "IS.csv")
+            elif subjective_metric == "OS":
+                data_path = os.path.join(self.data_dir, "RELATE", "scores", "OS.csv")
+            else:
+                return
+            data = pd.read_csv(data_path)   
+            anchors = data[data["anchor label"] == True]
+            avg = anchors.groupby("listener_id")["score"].mean()
 
-        data = pd.read_csv(data_path)
-        if split == "train" or split == "test":
-            data = data[data["in RELATE dataset"] == split]
-        elif split == "val":
-            data = data[data["in RELATE dataset"] == "validation"]
+            if split == "train" :
+                data = data[(data["in AudioCaps"]=="train") & (data["listener_id"].isin(avg[avg < 2].index))]
+            elif split == "test":
+                data = data[(data["in AudioCaps"]=="test") & (data["listener_id"].isin(avg[avg < 1].index))]
+            elif split == "val":
+                data = data[(data["in AudioCaps"]=="validation")  & (data["listener_id"].isin(avg[avg < 1].index))]
 
         # Aggregate scores by wavname
         data = (

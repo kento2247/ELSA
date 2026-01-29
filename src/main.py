@@ -431,7 +431,6 @@ def parse_args():
         type=str,
         nargs="+",
         default=["REL", "OVL"],
-        choices=["REL", "OVL"],
         help="Subjective metric to use from the dataset",
     )
     parser.add_argument(
