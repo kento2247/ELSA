@@ -28,6 +28,7 @@ class TTADataset(Dataset):
         dataset_names: list[
             Literal[
                 "relate",
+                "relate_isos",
                 "audiocap",
                 "musiccap",
                 "xacle",
@@ -35,7 +36,15 @@ class TTADataset(Dataset):
                 "clotho",
                 "compa",
             ]
-        ] = ["relate", "audiocap", "musiccap", "aishell7b", "clotho", "compa"],
+        ] = [
+            "relate",
+            "relate_isos",
+            "audiocap",
+            "musiccap",
+            "aishell7b",
+            "clotho",
+            "compa",
+        ],
         split: Literal["train", "val", "test"] = "train",
         bitrate: int = 16000,
         max_len: int = 16000 * 10,
@@ -55,6 +64,8 @@ class TTADataset(Dataset):
         for subjective_metric in subjective_metrics:
             if "relate" in dataset_names:
                 self._load_relate_data(split, subjective_metric)
+            if "relate_isos" in dataset_names:
+                self._load_relate_isos_data(split, subjective_metric)
             if "audiocap" in dataset_names:
                 self._load_audiocap_data(split, subjective_metric)
             if "musiccap" in dataset_names:
@@ -78,30 +89,15 @@ class TTADataset(Dataset):
     def _load_relate_data(self, split: str, subjective_metric: str) -> None:
         """Load RELATE dataset and split into train, val, test sets."""
         max_score = 10.0
-        if subjective_metric == "REL":
-            data_path = os.path.join(self.data_dir, "RELATE", "scores", "REL.csv")
-            data = pd.read_csv(data_path)
-            if split == "train" or split == "test":
-                data = data[data["in RELATE dataset"] == split]
-            elif split == "val":
-                data = data[data["in RELATE dataset"] == "validation"]
-        else:
-            if subjective_metric == "IS":
-                data_path = os.path.join(self.data_dir, "RELATE", "scores", "IS.csv")
-            elif subjective_metric == "OS":
-                data_path = os.path.join(self.data_dir, "RELATE", "scores", "OS.csv")
-            else:
-                return
-            data = pd.read_csv(data_path)   
-            anchors = data[data["anchor label"] == True]
-            avg = anchors.groupby("listener_id")["score"].mean()
+        if subjective_metric != "REL":
+            return
 
-            if split == "train" :
-                data = data[(data["in AudioCaps"]=="train") & (data["listener_id"].isin(avg[avg < 2].index))]
-            elif split == "test":
-                data = data[(data["in AudioCaps"]=="test") & (data["listener_id"].isin(avg[avg < 1].index))]
-            elif split == "val":
-                data = data[(data["in AudioCaps"]=="validation")  & (data["listener_id"].isin(avg[avg < 1].index))]
+        data_path = os.path.join(self.data_dir, "RELATE", "scores", "REL.csv")
+        data = pd.read_csv(data_path)
+        if split == "train" or split == "test":
+            data = data[data["in RELATE dataset"] == split]
+        elif split == "val":
+            data = data[data["in RELATE dataset"] == "validation"]
 
         # Aggregate scores by wavname
         data = (
@@ -145,6 +141,86 @@ class TTADataset(Dataset):
             self.database.append(
                 {
                     "dataset": "relate",
+                    "text_id": text_id,
+                    "audio_file_path": audio_file_path,
+                    "ref_audio_file_path": ref_audio_file_path,
+                    "text": text,
+                    "score": score,
+                    "subjective_metric_id": 0 if subjective_metric == "REL" else 1,
+                }
+            )
+
+    def _load_relate_isos_data(self, split: str, subjective_metric: str) -> None:
+        """Load RELATE dataset and split into train, val, test sets."""
+        max_score = 10.0
+        if subjective_metric == "IS":
+            data_path = os.path.join(self.data_dir, "RELATE", "scores", "IS.csv")
+        elif subjective_metric == "OS":
+            data_path = os.path.join(self.data_dir, "RELATE", "scores", "OS.csv")
+        else:
+            return
+        data = pd.read_csv(data_path)
+        anchors = data[data["anchor label"] == True]
+        avg = anchors.groupby("listener_id")["score"].mean()
+
+        if split == "train":
+            data = data[
+                (data["in AudioCaps"] == "train")
+                & (data["listener_id"].isin(avg[avg < 2].index))
+            ]
+        elif split == "test":
+            data = data[
+                (data["in AudioCaps"] == "test")
+                & (data["listener_id"].isin(avg[avg < 1].index))
+            ]
+        elif split == "val":
+            data = data[
+                (data["in AudioCaps"] == "validation")
+                & (data["listener_id"].isin(avg[avg < 1].index))
+            ]
+
+        # Aggregate scores by wavname
+        data = (
+            data.groupby("wavname")
+            .agg(
+                {
+                    "text": "first",
+                    "score": "mean",
+                    "audio type": "first",
+                }
+            )
+            .reset_index()
+        )
+
+        for index, row in tqdm(
+            data.iterrows(),
+            total=len(data),
+            desc=f"Loading RELATE {split} {subjective_metric} data",
+        ):
+            text_id: str = f"{split}_{subjective_metric}_{index}"
+            wavname: str = row["wavname"]
+            text: str = row["text"]
+            score: float = float(row["score"]) / max_score  # normalize to [0, 1]
+            audio_file_path = os.path.join(self.data_dir, f"wav{wavname}")
+            audio_type = row["audio type"]
+
+            if audio_type == "natural":
+                continue
+
+            ref_audio_file_path = os.path.join(
+                self.data_dir,
+                "wav",
+                "audiocaps",
+                split if split != "val" else "test",
+                f"{wavname.split('/')[-1]}",
+            )
+            if not os.path.exists(audio_file_path):
+                raise FileNotFoundError(f"Wav file not found: {audio_file_path}")
+            if not os.path.exists(ref_audio_file_path):
+                ref_audio_file_path = ""
+            self.database.append(
+                {
+                    "dataset": "relate_isos",
                     "text_id": text_id,
                     "audio_file_path": audio_file_path,
                     "ref_audio_file_path": ref_audio_file_path,
