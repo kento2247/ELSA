@@ -1,5 +1,7 @@
 data
-models
+/models/
 __pycache__
 wandb
 .checkpoints
+plots
+.venv
