@@ -1,4 +1,4 @@
-# TTAEval
+# ELSA: Acoustic Event-Level Semantic Alignment for Fine-Grained Reference-Free Text-to-Audio Evaluation
 
 Text-to-Audio生成モデルの評価を行うためのツールキット。人間の主観評価スコア（REL/OVL）との相関を測定します。
 
