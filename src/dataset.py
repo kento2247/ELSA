@@ -24,7 +24,16 @@ class TTADataset(Dataset):
                 "OrderText",
                 "OrderAudio",
             ]
-        ] = ["REL", "OVL"],
+        ] = [
+            "REL",
+            "OVL",
+            "IS",
+            "OS",
+            "AttributeText",
+            "AttributeAudio",
+            "OrderText",
+            "OrderAudio",
+        ],
         dataset_names: list[
             Literal[
                 "relate",
@@ -37,12 +46,12 @@ class TTADataset(Dataset):
                 "compa",
             ]
         ] = [
-            "relate",
-            "relate_isos",
-            "audiocap",
-            "musiccap",
-            "aishell7b",
-            "clotho",
+            # "relate",
+            # "relate_isos",
+            # "audiocap",
+            # "musiccap",
+            # "aishell7b",
+            # "clotho",
             "compa",
         ],
         split: Literal["train", "val", "test"] = "train",
@@ -77,7 +86,7 @@ class TTADataset(Dataset):
             if "clotho" in dataset_names:
                 self._load_clotho_data(split, subjective_metric)
             if "compa" in dataset_names:
-                pass  # TODO: implement COMPA dataset loading
+                self._load_compa_data(split, subjective_metric)
 
         if pre_load_features:
             for i in tqdm(
@@ -147,6 +156,11 @@ class TTADataset(Dataset):
                     "text": text,
                     "score": score,
                     "subjective_metric_id": 0 if subjective_metric == "REL" else 1,
+                    "text_incorrect_0": "",  # Not used
+                    "text_incorrect_1": "",  # Not used
+                    "audio_incorrect_0": "",  # Not used
+                    "audio_incorrect_1": "",  # Not used
+                    "num_choices": 0,  # Not used
                 }
             )
 
@@ -160,7 +174,7 @@ class TTADataset(Dataset):
         else:
             return
         data = pd.read_csv(data_path)
-        anchors = data[data["anchor label"] == True]
+        anchors = data[data["anchor label"]]
         avg = anchors.groupby("listener_id")["score"].mean()
 
         if split == "train":
@@ -227,6 +241,11 @@ class TTADataset(Dataset):
                     "text": text,
                     "score": score,
                     "subjective_metric_id": 0 if subjective_metric == "REL" else 1,
+                    "text_incorrect_0": "",  # Not used
+                    "text_incorrect_1": "",  # Not used
+                    "audio_incorrect_0": "",  # Not used
+                    "audio_incorrect_1": "",  # Not used
+                    "num_choices": 0,  # Not used
                 }
             )
 
@@ -234,6 +253,8 @@ class TTADataset(Dataset):
         """Load AudioCap dataset as test sets."""
         max_score = 5.0
         if split != "test":
+            return
+        if subjective_metric not in ["REL", "OVL"]:
             return
         audiocap_data_path = os.path.join(
             self.data_dir, "human_eval", "audio", "scores.csv"
@@ -269,6 +290,11 @@ class TTADataset(Dataset):
                     "text": text,
                     "score": score,
                     "subjective_metric_id": 0 if subjective_metric == "REL" else 1,
+                    "text_incorrect_0": "",  # Not used
+                    "text_incorrect_1": "",  # Not used
+                    "audio_incorrect_0": "",  # Not used
+                    "audio_incorrect_1": "",  # Not used
+                    "num_choices": 0,  # Not used
                 }
             )
 
@@ -276,6 +302,8 @@ class TTADataset(Dataset):
         """Load MusicCap music dataset as test sets."""
         max_score = 5.0
         if split != "test":
+            return
+        if subjective_metric not in ["REL", "OVL"]:
             return
         musiccap_data_path = os.path.join(
             self.data_dir, "human_eval", "music", "scores.csv"
@@ -311,6 +339,11 @@ class TTADataset(Dataset):
                     "text": text,
                     "score": score,
                     "subjective_metric_id": 0 if subjective_metric == "REL" else 1,
+                    "text_incorrect_0": "",  # Not used
+                    "text_incorrect_1": "",  # Not used
+                    "audio_incorrect_0": "",  # Not used
+                    "audio_incorrect_1": "",  # Not used
+                    "num_choices": 0,  # Not used
                 }
             )
 
@@ -364,6 +397,11 @@ class TTADataset(Dataset):
                     "text": text,
                     "score": score,
                     "subjective_metric_id": 0 if subjective_metric == "REL" else 1,
+                    "text_incorrect_0": "",  # Not used
+                    "text_incorrect_1": "",  # Not used
+                    "audio_incorrect_0": "",  # Not used
+                    "audio_incorrect_1": "",  # Not used
+                    "num_choices": 0,  # Not used
                 }
             )
 
@@ -371,6 +409,8 @@ class TTADataset(Dataset):
         """Load Clotho dataset as test sets."""
         max_score = 5.0
         if split != "test":
+            return
+        if subjective_metric not in ["REL", "OVL"]:
             return
         clotho_data_path = os.path.join(
             self.data_dir, "clotho", "clotho_ovl_rel_test_set.csv"
@@ -406,13 +446,19 @@ class TTADataset(Dataset):
                     "text": text,
                     "score": score,
                     "subjective_metric_id": 0 if subjective_metric == "REL" else 1,
+                    "text_incorrect_0": "",  # Not used
+                    "text_incorrect_1": "",  # Not used
+                    "audio_incorrect_0": "",  # Not used
+                    "audio_incorrect_1": "",  # Not used
+                    "num_choices": 0,  # Not used
                 }
             )
 
     def _load_aishell7b_data(self, split: str, subjective_metric: str) -> None:
         """Load AISHELL-7B (MusicEval-full) dataset."""
         max_score = 5.0
-
+        if subjective_metric not in ["REL", "OVL"]:
+            return
         # Load prompt info (text prompts)
         prompt_info_path = os.path.join(
             self.data_dir, "MusicEval-full", "prompt_info.txt"
@@ -466,8 +512,181 @@ class TTADataset(Dataset):
                     "text": text,
                     "score": score,
                     "subjective_metric_id": 0 if subjective_metric == "REL" else 1,
+                    "text_incorrect_0": "",  # Not used
+                    "text_incorrect_1": "",  # Not used
+                    "audio_incorrect_0": "",  # Not used
+                    "audio_incorrect_1": "",  # Not used
+                    "num_choices": 0,  # Not used
                 }
             )
+
+    def _load_compa_data(self, split: str, subjective_metric: str) -> None:
+        """Load CompA dataset for multiple choice tasks.
+
+        CompA has two sub-tasks:
+        - Attribute: AttributeText (audio -> text) and AttributeAudio (text -> audio)
+        - Order: OrderText (audio -> text) and OrderAudio (text -> audio)
+
+        Each instance has 2 audio files and 2 text captions (or 3 for Order triplet).
+        The task is to select the correct match from the choices.
+        """
+        if split != "test":
+            return  # CompA is only used for testing
+        if subjective_metric not in [
+            "AttributeText",
+            "AttributeAudio",
+            "OrderText",
+            "OrderAudio",
+        ]:
+            return
+        # Load Attribute dataset
+        if subjective_metric in ["AttributeText", "AttributeAudio"]:
+            attribute_csv_path = os.path.join(
+                self.data_dir, "CompA_attribute", "Compa-Attribute.csv"
+            )
+            if not os.path.exists(attribute_csv_path):
+                return
+
+            attribute_data = pd.read_csv(attribute_csv_path)
+            attribute_files_dir = os.path.join(
+                self.data_dir, "CompA_attribute", "CompA_attribute_files"
+            )
+
+            for index, row in tqdm(
+                attribute_data.iterrows(),
+                total=len(attribute_data),
+                desc=f"Loading CompA Attribute {subjective_metric} data",
+            ):
+                text_id: str = f"{split}_{subjective_metric}_{index}"
+
+                # Get audio files
+                audio_file_1 = os.path.join(attribute_files_dir, row["pair_file.1"])
+                audio_file_2 = os.path.join(
+                    attribute_files_dir, row["reversed_pair_file.1"]
+                )
+
+                # Get text captions
+                text_1 = row["pair_caption"]
+                text_2 = row["reversed_pair_caption"]
+
+                # For AttributeText: audio -> text (correct answer is text_1 for audio_file_1)
+                # For AttributeAudio: text -> audio (correct answer is audio_file_1 for text_1)
+                if subjective_metric == "AttributeText":
+                    # Task: Given audio_file_1, choose between text_1 and text_2
+                    data_item = {
+                        "dataset": "compa",
+                        "text_id": text_id,
+                        "audio_file_path": audio_file_1,  # Correct audio
+                        "ref_audio_file_path": "",  # Not used
+                        "text": text_1,
+                        "score": 0.0,  # Not used for classification
+                        "subjective_metric_id": 0,  # Not used
+                        "text_incorrect_0": text_2,  # Incorrect choice
+                        "text_incorrect_1": "",
+                        "audio_incorrect_0": "",  # Not used
+                        "audio_incorrect_1": "",  # Not used
+                        "num_choices": 2,
+                    }
+                    self.database.append(data_item)
+                elif subjective_metric == "AttributeAudio":
+                    # Task: Given text_1, choose between audio_file_1 and audio_file_2
+                    data_item = {
+                        "dataset": "compa",
+                        "text_id": text_id,
+                        "audio_file_path": audio_file_1,  # Correct audio
+                        "ref_audio_file_path": "",  # Not used
+                        "text": text_1,
+                        "score": 0.0,  # Not used for classification
+                        "subjective_metric_id": 0,  # Not used
+                        "text_incorrect_0": "",  # Incorrect choice
+                        "text_incorrect_1": "",
+                        "audio_incorrect_0": audio_file_2,  # Incorrect choice
+                        "audio_incorrect_1": "",  # Not used
+                        "num_choices": 2,
+                    }
+                    self.database.append(data_item)
+
+        # Load Order dataset
+        if subjective_metric in ["OrderText", "OrderAudio"]:
+            order_csv_path = os.path.join(
+                self.data_dir, "CompA_order", "CompA_order_benchmark.csv"
+            )
+            if not os.path.exists(order_csv_path):
+                return
+
+            order_data = pd.read_csv(order_csv_path)
+            order_files_dir = os.path.join(
+                self.data_dir, "CompA_order", "CompA_order_files"
+            )
+
+            for index, row in tqdm(
+                order_data.iterrows(),
+                total=len(order_data),
+                desc=f"Loading CompA Order {subjective_metric} data",
+            ):
+                text_id: str = f"{split}_{subjective_metric}_{index}"
+
+                # Get audio files
+                audio_file_1 = os.path.join(order_files_dir, row["pair_file"])
+                audio_file_2 = os.path.join(order_files_dir, row["reversed_pair_file"])
+
+                # Get text captions
+                text_1 = row["pair_caption"]
+                text_2 = row["reversed_pair_caption"]
+
+                # Check if triplet exists
+                has_triplet = (
+                    pd.notna(row.get("triplet_caption"))
+                    and row.get("triplet_caption") != "-"
+                    and pd.notna(row.get("triplet_file"))
+                    and row.get("triplet_file") != "-"
+                )
+
+                if has_triplet:
+                    audio_file_3 = os.path.join(order_files_dir, row["triplet_file"])
+                    text_3 = row["triplet_caption"]
+                else:
+                    audio_file_3 = None
+                    text_3 = None
+
+                # For OrderText: audio -> text (correct answer is text_1 for audio_file_1)
+                # For OrderAudio: text -> audio (correct answer is audio_file_1 for text_1)
+                if subjective_metric == "OrderText":
+                    # Task: Given audio_file_1, choose between text_1, text_2, (and text_3)
+                    data_item = {
+                        "dataset": "compa",
+                        "text_id": text_id,
+                        "audio_file_path": audio_file_1,  # Correct audio
+                        "ref_audio_file_path": "",  # Not used
+                        "text": text_1,
+                        "score": 0.0,  # Not used for classification
+                        "subjective_metric_id": 0,  # Not used
+                        "text_incorrect_0": text_2,  # Incorrect choice
+                        "text_incorrect_1": text_3
+                        if has_triplet
+                        else "",  # Additional incorrect choice
+                        "audio_incorrect_0": "",  # Not used
+                        "audio_incorrect_1": "",  # Not used
+                        "num_choices": 2 if not has_triplet else 3,
+                    }
+                    self.database.append(data_item)
+                elif subjective_metric == "OrderAudio":
+                    # Task: Given text_1, choose between audio_file_1, audio_file_2, (and audio_file_3)
+                    data_item = {
+                        "dataset": "compa",
+                        "text_id": text_id,
+                        "audio_file_path": audio_file_1,  # Correct audio
+                        "ref_audio_file_path": "",  # Not used
+                        "text": text_1,
+                        "score": 0.0,  # Not used for classification
+                        "subjective_metric_id": 0,  # Not used
+                        "text_incorrect_0": "",  # Not used
+                        "text_incorrect_1": "",  # Not used
+                        "audio_incorrect_0": audio_file_2,  # Incorrect choice
+                        "audio_incorrect_1": audio_file_3 if has_triplet else "",
+                        "num_choices": 2 if not has_triplet else 3,
+                    }
+                    self.database.append(data_item)
 
     def _load_wav(self, file_path: str) -> torch.Tensor:
         """Load wav file based on dataset and filename."""
@@ -512,7 +731,7 @@ class TTADataset(Dataset):
 
     def _load_features(self, data):
         """Pre-load all features into memory to speed up data loading."""
-        msclap_dim = 1024
+        clap_variant = "humanclap"
         laionclap_dim = 512
         text_file_name = f"{data['text_id']}.pt"
         audio_file_name = os.path.basename(data["audio_file_path"]).replace(
@@ -520,109 +739,123 @@ class TTADataset(Dataset):
         )
         dataset_name = data["dataset"]
 
-        # data["audio"] = self._load_wav(data["audio_file_path"])
-
-        data["msclap_audio"] = self._load_pre_extracted_feats(
-            feats_name="msclap_audio",
+        data[f"{clap_variant}_audio"] = self._load_pre_extracted_feats(
+            feats_name=f"{clap_variant}_audio",
             dataset_name=dataset_name,
             file_name=audio_file_name,
         )
-        data["msclap_text"] = self._load_pre_extracted_feats(
-            feats_name="msclap_text",
+        data[f"{clap_variant}_text"] = self._load_pre_extracted_feats(
+            feats_name=f"{clap_variant}_text",
             dataset_name=dataset_name,
             file_name=text_file_name,
         )
-        data["msclap_parsed_audio"] = self._pad_or_truncate_feats(
+        data[f"{clap_variant}_parsed_audio"] = self._pad_or_truncate_feats(
             self._load_pre_extracted_feats(
-                feats_name="msclap_parsed_audio",
+                feats_name=f"{clap_variant}_parsed_audio",
                 dataset_name=dataset_name,
                 file_name=text_file_name,
-                dim=msclap_dim,
+                dim=laionclap_dim,
             )
         )
-        data["msclap_parsed_text"] = self._pad_or_truncate_feats(
+        data[f"{clap_variant}_parsed_text"] = self._pad_or_truncate_feats(
             self._load_pre_extracted_feats(
-                feats_name="msclap_parsed_text",
+                feats_name=f"{clap_variant}_parsed_text",
                 dataset_name=dataset_name,
                 file_name=text_file_name,
-                dim=msclap_dim,
+                dim=laionclap_dim,
             )
         )
-        data["msclap_parsed_mask"] = self._pad_or_truncate_mask(
+        data[f"{clap_variant}_parsed_mask"] = self._pad_or_truncate_mask(
             self._load_pre_extracted_mask(
-                feats_name="msclap_parsed_mask",
+                feats_name=f"{clap_variant}_parsed_mask",
                 dataset_name=dataset_name,
                 file_name=text_file_name,
             )
         )
 
-        data["laionclap_audio"] = self._load_pre_extracted_feats(
-            feats_name="laionclap_audio",
-            dataset_name=dataset_name,
-            file_name=audio_file_name,
-        )
-        data["laionclap_text"] = self._load_pre_extracted_feats(
-            feats_name="laionclap_text",
-            dataset_name=dataset_name,
-            file_name=text_file_name,
-        )
-        data["laionclap_parsed_audio"] = self._pad_or_truncate_feats(
-            self._load_pre_extracted_feats(
-                feats_name="laionclap_parsed_audio",
-                dataset_name=dataset_name,
-                file_name=text_file_name,
-                dim=laionclap_dim,
-            )
-        )
-        data["laionclap_parsed_text"] = self._pad_or_truncate_feats(
-            self._load_pre_extracted_feats(
-                feats_name="laionclap_parsed_text",
-                dataset_name=dataset_name,
-                file_name=text_file_name,
-                dim=laionclap_dim,
-            )
-        )
-        data["laionclap_parsed_mask"] = self._pad_or_truncate_mask(
-            self._load_pre_extracted_mask(
-                feats_name="laionclap_parsed_mask",
-                dataset_name=dataset_name,
-                file_name=text_file_name,
-            )
-        )
+        # Load CompA choice features if this is a CompA dataset
+        if dataset_name == "compa":
+            text_incorrect_0 = data.get("text_incorrect_0", "")
+            text_incorrect_1 = data.get("text_incorrect_1", "")
+            audio_incorrect_0 = data.get("audio_incorrect_0", "")
+            audio_incorrect_1 = data.get("audio_incorrect_1", "")
 
-        data["humanclap_audio"] = self._load_pre_extracted_feats(
-            feats_name="humanclap_audio",
-            dataset_name=dataset_name,
-            file_name=audio_file_name,
-        )
-        data["humanclap_text"] = self._load_pre_extracted_feats(
-            feats_name="humanclap_text",
-            dataset_name=dataset_name,
-            file_name=text_file_name,
-        )
-        data["humanclap_parsed_audio"] = self._pad_or_truncate_feats(
-            self._load_pre_extracted_feats(
-                feats_name="humanclap_parsed_audio",
-                dataset_name=dataset_name,
-                file_name=text_file_name,
-                dim=laionclap_dim,
-            )
-        )
-        data["humanclap_parsed_text"] = self._pad_or_truncate_feats(
-            self._load_pre_extracted_feats(
-                feats_name="humanclap_parsed_text",
-                dataset_name=dataset_name,
-                file_name=text_file_name,
-                dim=laionclap_dim,
-            )
-        )
-        data["humanclap_parsed_mask"] = self._pad_or_truncate_mask(
-            self._load_pre_extracted_mask(
-                feats_name="humanclap_parsed_mask",
-                dataset_name=dataset_name,
-                file_name=text_file_name,
-            )
-        )
+            # Load text choice features for AttributeText/OrderText tasks
+            for i, text_str in enumerate([text_incorrect_0, text_incorrect_1]):
+                if text_str != "":
+                    data[f"choice_{i}_text"] = self._load_pre_extracted_feats(
+                        feats_name=f"{clap_variant}_text",
+                        dataset_name=dataset_name,
+                        file_name=f"{data['text_id']}_{i}.pt",
+                    )
+                    data[f"choice_{i}_parsed_text"] = self._pad_or_truncate_feats(
+                        self._load_pre_extracted_feats(
+                            feats_name=f"{clap_variant}_parsed_text",
+                            dataset_name=dataset_name,
+                            file_name=f"{data['text_id']}_{i}.pt",
+                            dim=laionclap_dim,
+                        )
+                    )
+                    data[f"choice_{i}_parsed_mask"] = self._pad_or_truncate_mask(
+                        self._load_pre_extracted_mask(
+                            feats_name=f"{clap_variant}_parsed_mask",
+                            dataset_name=dataset_name,
+                            file_name=f"{data['text_id']}_{i}.pt",
+                        )
+                    )
+                else:
+                    data[f"choice_{i}_text"] = torch.zeros_like(
+                        data[f"{clap_variant}_text"]
+                    )
+                    data[f"choice_{i}_parsed_text"] = torch.zeros_like(
+                        data[f"{clap_variant}_parsed_text"]
+                    )
+                    data[f"choice_{i}_parsed_mask"] = torch.zeros_like(
+                        data[f"{clap_variant}_parsed_mask"]
+                    )
+
+            # Load audio choice features for AttributeAudio/OrderAudio tasks
+            for i, audio_file_path in enumerate([audio_incorrect_0, audio_incorrect_1]):
+                if audio_file_path != "":
+                    audio_file_path = os.path.basename(audio_file_path).replace(
+                        ".wav", ".pt"
+                    )
+                    data[f"choice_{i}_audio"] = self._load_pre_extracted_feats(
+                        feats_name=f"{clap_variant}_audio",
+                        dataset_name=dataset_name,
+                        file_name=audio_file_path,
+                    )
+                    data[f"choice_{i}_parsed_audio"] = (
+                        self._pad_or_truncate_feats(
+                            self._load_pre_extracted_feats(
+                                feats_name=f"{clap_variant}_parsed_audio",
+                                dataset_name=dataset_name,
+                                file_name=f"incorrect_{i}_{data['text_id']}.pt",
+                                dim=laionclap_dim,
+                            )
+                        )
+                    )
+                    data[f"choice_{i}_parsed_mask"] = self._pad_or_truncate_mask(
+                        self._load_pre_extracted_mask(
+                            feats_name=f"{clap_variant}_parsed_mask",
+                            dataset_name=dataset_name,
+                            file_name=f"incorrect_{i}_{data['text_id']}.pt",
+                        )
+                    )
+                else:
+                    data[f"choice_{i}_audio"] = torch.zeros_like(
+                        data[f"{clap_variant}_audio"]
+                    )
+                    data[f"choice_{i}_parsed_audio"] = torch.zeros_like(
+                        data[f"{clap_variant}_parsed_audio"]
+                    )
+                    data[f"choice_{i}_parsed_mask"] = torch.zeros_like(
+                        data[f"{clap_variant}_parsed_mask"]
+                    )
+
+            # Set correct choice index (always 0 for CompA)
+            data["correct_choice_idx"] = 0
+
         return data
 
     def _pad_or_truncate_feats(self, feats: torch.Tensor) -> torch.Tensor:

@@ -6,7 +6,9 @@ import numpy as np
 from scipy import stats
 
 
-def _validate_inputs(y_true: np.ndarray, y_pred: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def _validate_inputs(
+    y_true: np.ndarray, y_pred: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
     """
     入力配列からnan/infを含む要素を除外する
     """
@@ -49,3 +51,27 @@ def kendall_tau(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     y_true, y_pred = _validate_inputs(y_true, y_pred)
     corr, _ = stats.kendalltau(y_true, y_pred)
     return float(corr)
+
+
+def accuracy(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    """
+    分類精度を計算する関数
+
+    Args:
+        y_true: 正解ラベル（整数のインデックス）
+        y_pred: 予測ラベル（整数のインデックス）
+
+    Returns:
+        分類精度（0.0 ~ 1.0）
+    """
+    y_true = np.asarray(y_true, dtype=np.int64)
+    y_pred = np.asarray(y_pred, dtype=np.int64)
+
+    if len(y_true) != len(y_pred):
+        raise ValueError(f"Length mismatch: y_true={len(y_true)}, y_pred={len(y_pred)}")
+
+    if len(y_true) == 0:
+        return float("nan")
+
+    correct = np.sum(y_true == y_pred)
+    return float(correct / len(y_true))

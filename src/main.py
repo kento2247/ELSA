@@ -12,6 +12,7 @@ import wandb
 from dataset import TTADataset
 from model import TTAEvalModel
 from utils.eval_methods import (
+    accuracy,
     kendall_tau,
     mse,
     pearson_correlation,
@@ -41,6 +42,7 @@ class TTAEval:
         log_wandb: bool,
         save_qualitative: bool,
         parse_event_count: str = "all",
+        clap_variant: str = "humanclap",
     ):
         self.data_dir = data_dir
         self.features_dir = features_dir
@@ -55,7 +57,7 @@ class TTAEval:
         self.parse_event_count = parse_event_count
         self.log_wandb = log_wandb
         self.save_qualitative = save_qualitative
-
+        self.clap_variant = clap_variant
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = TTAEvalModel().to(self.device)
 
@@ -171,13 +173,17 @@ class TTAEval:
         num_batches = 0
 
         for batch in tqdm(train_loader, desc=f"Training Epoch {epoch}"):
-            clap_audio = batch["humanclap_audio"].to(self.device)
-            clap_text = batch["humanclap_text"].to(self.device)
+            clap_audio = batch[f"{self.clap_variant}_audio"].to(self.device)
+            clap_text = batch[f"{self.clap_variant}_text"].to(self.device)
             clap_parsed_audio = self._maybe_to_device(
-                batch.get("humanclap_parsed_audio")
+                batch.get(f"{self.clap_variant}_parsed_audio")
             )
-            clap_parsed_text = self._maybe_to_device(batch.get("humanclap_parsed_text"))
-            parsed_mask = self._maybe_to_device(batch.get("humanclap_parsed_mask"))
+            clap_parsed_text = self._maybe_to_device(
+                batch.get(f"{self.clap_variant}_parsed_text")
+            )
+            parsed_mask = self._maybe_to_device(
+                batch.get(f"{self.clap_variant}_parsed_mask")
+            )
             metric_id = batch.get("subjective_metric_id")
             if metric_id is not None:
                 metric_id = metric_id.to(self.device)
@@ -203,6 +209,11 @@ class TTAEval:
 
     def evaluate(self, data_loader: DataLoader, desc: str = "Evaluating") -> dict:
         """Evaluate the model and return metrics dict."""
+        # Check if this is a CompA dataset (multiple choice task)
+        is_compa = next(iter(data_loader))["dataset"][0] == "compa"
+        if is_compa:
+            return self._evaluate_compa(data_loader, desc)
+
         self.model.eval()
         all_preds: list[np.ndarray] = []
         all_scores: list[np.ndarray] = []
@@ -210,15 +221,17 @@ class TTAEval:
 
         with torch.no_grad():
             for batch in tqdm(data_loader, desc=desc):
-                clap_audio = batch["humanclap_audio"].to(self.device)
-                clap_text = batch["humanclap_text"].to(self.device)
+                clap_audio = batch[f"{self.clap_variant}_audio"].to(self.device)
+                clap_text = batch[f"{self.clap_variant}_text"].to(self.device)
                 clap_parsed_audio = self._maybe_to_device(
-                    batch.get("humanclap_parsed_audio")
+                    batch.get(f"{self.clap_variant}_parsed_audio")
                 )
                 clap_parsed_text = self._maybe_to_device(
-                    batch.get("humanclap_parsed_text")
+                    batch.get(f"{self.clap_variant}_parsed_text")
                 )
-                parsed_mask = self._maybe_to_device(batch.get("humanclap_parsed_mask"))
+                parsed_mask = self._maybe_to_device(
+                    batch.get(f"{self.clap_variant}_parsed_mask")
+                )
                 metric_id = batch.get("subjective_metric_id")
                 if metric_id is not None:
                     metric_id = metric_id.to(self.device)
@@ -301,6 +314,169 @@ class TTAEval:
             },
             "y_list": all_scores,
             "y_hat_list": all_preds,
+            "audio_file_paths": all_audio_file_paths,
+        }
+
+    def _evaluate_compa(
+        self, data_loader: DataLoader, desc: str = "Evaluating"
+    ) -> dict:
+        """Evaluate CompA dataset as multiple choice classification task.
+
+        For AttributeText/OrderText: Given audio, choose the correct text from choices.
+        For AttributeAudio/OrderAudio: Given text, choose the correct audio from choices.
+        """
+
+        self.model.eval()
+        all_pred_choices: list[int] = []
+        all_correct_choices: list[int] = []
+        all_audio_file_paths: list[str] = []
+
+        with torch.no_grad():
+            for batch in tqdm(data_loader, desc=desc):
+                # Extract batch data
+                batch_size = batch[f"{self.clap_variant}_audio"].shape[0]
+                num_choices_list = batch.get("num_choices", [])
+                correct_choice_indices = [0] * batch_size
+                is_text_task = batch["text_incorrect_0"][0] != ""
+
+                # AttributeText or OrderText: audio -> text
+                if is_text_task:
+                    batch_pred_choices = []
+                    for i in range(batch_size):
+                        num_choices = int(num_choices_list[i])
+                        query_audio_feats = (
+                            batch[f"{self.clap_variant}_audio"][i]
+                            .to(self.device)
+                            .unsqueeze(0)
+                            .repeat(num_choices, 1)
+                        )
+                        query_parsed_audio = (
+                            batch[f"{self.clap_variant}_parsed_audio"][i]
+                            .to(self.device)
+                            .unsqueeze(0)
+                            .repeat(num_choices, 1, 1)
+                        )
+
+                        # Collect text choice features: index 0 = correct, index 1+ = incorrect
+                        choice_text_feats_list = []
+                        choice_parsed_text_list = []
+                        choice_parsed_mask_list = []
+                        for j, prefix in enumerate(
+                            [f"{self.clap_variant}", "choice_0", "choice_1"]
+                        ):
+                            if j >= num_choices:
+                                break
+                            choice_text_feats_list.append(
+                                batch[f"{prefix}_text"][i].to(self.device)
+                            )
+                            choice_parsed_text_list.append(
+                                batch[f"{prefix}_parsed_text"][i].to(self.device)
+                            )
+                            choice_parsed_mask_list.append(
+                                batch[f"{prefix}_parsed_mask"][i].to(self.device)
+                            )
+
+                        # Stack all choice features: [num_choices, D]
+                        choice_text_feats = torch.stack(choice_text_feats_list, dim=0)
+                        choice_parsed_text = torch.stack(choice_parsed_text_list, dim=0)
+                        choice_parsed_mask = torch.stack(choice_parsed_mask_list, dim=0)
+
+                        preds = (
+                            self.model(
+                                query_audio_feats,
+                                choice_text_feats,
+                                query_parsed_audio,
+                                choice_parsed_text,
+                                choice_parsed_mask,
+                                torch.zeros(num_choices, dtype=torch.long).to(
+                                    self.device
+                                ),
+                            )
+                            .cpu()
+                            .numpy()
+                        )
+
+                        # Select the choice with highest similarity
+                        pred_choice_idx = int(np.argmax(preds))
+                        batch_pred_choices.append(pred_choice_idx)
+
+                    all_pred_choices.extend(batch_pred_choices)
+
+                # AttributeAudio or OrderAudio: text -> audio
+                else:
+                    batch_pred_choices = []
+                    for i in range(batch_size):
+                        num_choices = int(num_choices_list[i])
+                        query_text_feats = (
+                            batch[f"{self.clap_variant}_text"][i]
+                            .to(self.device)
+                            .unsqueeze(0)
+                            .repeat(num_choices, 1)
+                        )
+                        query_parsed_text = (
+                            batch[f"{self.clap_variant}_parsed_text"][i]
+                            .to(self.device)
+                            .unsqueeze(0)
+                            .repeat(num_choices, 1, 1)
+                        )
+
+                        # Collect audio choice features: index 0 = correct, index 1+ = incorrect
+                        choice_audio_feats_list = []
+                        choice_parsed_audio_list = []
+                        choice_parsed_mask_list = []
+                        for j, prefix in enumerate(
+                            [f"{self.clap_variant}", "choice_0", "choice_1"]
+                        ):
+                            if j >= num_choices:
+                                break
+                            choice_audio_feats_list.append(
+                                batch[f"{prefix}_audio"][i].to(self.device)
+                            )
+                            choice_parsed_audio_list.append(
+                                batch[f"{prefix}_parsed_audio"][i].to(self.device)
+                            )
+                            choice_parsed_mask_list.append(
+                                batch[f"{prefix}_parsed_mask"][i].to(self.device)
+                            )
+
+                        # Stack all choice features: [num_choices, D]
+                        choice_audio_feats = torch.stack(choice_audio_feats_list, dim=0)
+                        choice_parsed_audio = torch.stack(
+                            choice_parsed_audio_list, dim=0
+                        )
+                        choice_parsed_mask = torch.stack(choice_parsed_mask_list, dim=0)
+
+                        preds = (
+                            self.model(
+                                choice_audio_feats,
+                                query_text_feats,
+                                choice_parsed_audio,
+                                query_parsed_text,
+                                choice_parsed_mask,
+                                torch.zeros(num_choices, dtype=torch.long).to(
+                                    self.device
+                                ),
+                            )
+                            .cpu()
+                            .numpy()
+                        )
+
+                        # Select the choice with highest similarity
+                        pred_choice_idx = int(np.argmax(preds))
+                        batch_pred_choices.append(pred_choice_idx)
+
+                    all_pred_choices.extend(batch_pred_choices)
+
+                all_correct_choices.extend(correct_choice_indices)
+
+        return {
+            "metrics": {
+                "accuracy": accuracy(
+                    np.array(all_correct_choices), np.array(all_pred_choices)
+                ),
+            },
+            "y_list": np.array(all_correct_choices),
+            "y_hat_list": np.array(all_pred_choices),
             "audio_file_paths": all_audio_file_paths,
         }
 
@@ -430,15 +606,16 @@ def parse_args():
         "--subjective_metrics",
         type=str,
         nargs="+",
-        default=["REL", "OVL"],
+        # default=["REL", "OVL", "IS", "OS", "AttributeText", "AttributeAudio", "OrderText", "OrderAudio"],
+        default=["AttributeText", "AttributeAudio", "OrderText", "OrderAudio"],
         help="Subjective metric to use from the dataset",
     )
     parser.add_argument(
         "--test_dataset_names",
         type=str,
         nargs="+",
-        default=["relate", "audiocap", "musiccap", "aishell7b", "clotho"],
-        # default=["relate", "audiocap", "musiccap", "aishell7b"],
+        # default=["relate", "audiocap", "musiccap", "aishell7b", "clotho", "compa"],
+        default=["compa"],
         help="List of dataset names to test on",
     )
     parser.add_argument(
