@@ -12,7 +12,6 @@ import wandb
 from dataset import TTADataset
 from model import TTAEvalModel
 from utils.eval_methods import (
-    accuracy,
     kendall_tau,
     mse,
     pearson_correlation,
@@ -327,157 +326,166 @@ class TTAEval:
         """
 
         self.model.eval()
-        all_pred_choices: list[int] = []
-        all_correct_choices: list[int] = []
-        all_audio_file_paths: list[str] = []
+        all_points = 0
+        num_samples = 0
+        is_text_task = data_loader.dataset.subjective_metrics[0] in [
+            "AttributeText",
+            "OrderText",
+        ]
 
         with torch.no_grad():
             for batch in tqdm(data_loader, desc=desc):
                 # Extract batch data
                 batch_size = batch[f"{self.clap_variant}_audio"].shape[0]
-                num_choices_list = batch.get("num_choices", [])
-                correct_choice_indices = [0] * batch_size
-                is_text_task = batch["text_incorrect_0"][0] != ""
 
                 # AttributeText or OrderText: audio -> text
                 if is_text_task:
-                    batch_pred_choices = []
                     for i in range(batch_size):
-                        num_choices = int(num_choices_list[i])
-                        query_audio_feats = (
-                            batch[f"{self.clap_variant}_audio"][i]
-                            .to(self.device)
-                            .unsqueeze(0)
-                            .repeat(num_choices, 1)
-                        )
-                        query_parsed_audio = (
-                            batch[f"{self.clap_variant}_parsed_audio"][i]
-                            .to(self.device)
-                            .unsqueeze(0)
-                            .repeat(num_choices, 1, 1)
-                        )
-
-                        # Collect text choice features: index 0 = correct, index 1+ = incorrect
-                        choice_text_feats_list = []
-                        choice_parsed_text_list = []
-                        choice_parsed_mask_list = []
-                        for j, prefix in enumerate(
-                            [f"{self.clap_variant}", "choice_0", "choice_1"]
+                        both_correct = True
+                        for correct_idx, (audio_prefix, audio_suffix) in enumerate(
+                            [("", ""), ("rev_", "_rev")]
                         ):
-                            if j >= num_choices:
+                            # Query audio embed.
+                            query_audio_feats = (
+                                batch[f"{self.clap_variant}_audio{audio_suffix}"][i]
+                                .to(self.device)
+                                .reshape(1, -1)
+                                .repeat(2, 1)
+                            )
+
+                            # Target text embed.
+                            text_feats_list = []
+                            parsed_audio_list = []
+                            parsed_text_list = []
+                            parsed_mask_list = []
+                            for text_suffix in ["", "_rev"]:
+                                text_feats_list.append(
+                                    batch[f"{self.clap_variant}_text{text_suffix}"][i]
+                                    .to(self.device)
+                                    .reshape(-1)
+                                )
+                                parsed_audio_list.append(
+                                    batch[
+                                        f"{audio_prefix}{self.clap_variant}_parsed_audio{text_suffix}"
+                                    ][i].to(self.device)
+                                )
+                                parsed_text_list.append(
+                                    batch[
+                                        f"{audio_prefix}{self.clap_variant}_parsed_text{text_suffix}"
+                                    ][i].to(self.device)
+                                )
+                                parsed_mask_list.append(
+                                    batch[
+                                        f"{audio_prefix}{self.clap_variant}_parsed_mask{text_suffix}"
+                                    ][i].to(self.device)
+                                )
+
+                            # Stack all choice features: [num_choices, D]
+                            text_feats = torch.stack(text_feats_list, dim=0)
+                            parsed_text = torch.stack(parsed_text_list, dim=0)
+                            parsed_audio = torch.stack(parsed_audio_list, dim=0)
+                            parsed_mask = torch.stack(parsed_mask_list, dim=0)
+
+                            preds = (
+                                self.model(
+                                    query_audio_feats,
+                                    text_feats,
+                                    parsed_audio,
+                                    parsed_text,
+                                    parsed_mask,
+                                    torch.zeros(2, dtype=torch.long).to(self.device),
+                                )
+                                .cpu()
+                                .numpy()
+                            )
+
+                            # Select the choice with highest similarity
+                            pred_choice_idx = int(np.argmax(preds))
+                            if correct_idx != pred_choice_idx:
+                                both_correct = False
                                 break
-                            choice_text_feats_list.append(
-                                batch[f"{prefix}_text"][i].to(self.device)
-                            )
-                            choice_parsed_text_list.append(
-                                batch[f"{prefix}_parsed_text"][i].to(self.device)
-                            )
-                            choice_parsed_mask_list.append(
-                                batch[f"{prefix}_parsed_mask"][i].to(self.device)
-                            )
 
-                        # Stack all choice features: [num_choices, D]
-                        choice_text_feats = torch.stack(choice_text_feats_list, dim=0)
-                        choice_parsed_text = torch.stack(choice_parsed_text_list, dim=0)
-                        choice_parsed_mask = torch.stack(choice_parsed_mask_list, dim=0)
-
-                        preds = (
-                            self.model(
-                                query_audio_feats,
-                                choice_text_feats,
-                                query_parsed_audio,
-                                choice_parsed_text,
-                                choice_parsed_mask,
-                                torch.zeros(num_choices, dtype=torch.long).to(
-                                    self.device
-                                ),
-                            )
-                            .cpu()
-                            .numpy()
-                        )
-
-                        # Select the choice with highest similarity
-                        pred_choice_idx = int(np.argmax(preds))
-                        batch_pred_choices.append(pred_choice_idx)
-
-                    all_pred_choices.extend(batch_pred_choices)
+                        all_points += 1 if both_correct else 0
+                        num_samples += 1
 
                 # AttributeAudio or OrderAudio: text -> audio
                 else:
-                    batch_pred_choices = []
                     for i in range(batch_size):
-                        num_choices = int(num_choices_list[i])
-                        query_text_feats = (
-                            batch[f"{self.clap_variant}_text"][i]
-                            .to(self.device)
-                            .unsqueeze(0)
-                            .repeat(num_choices, 1)
-                        )
-                        query_parsed_text = (
-                            batch[f"{self.clap_variant}_parsed_text"][i]
-                            .to(self.device)
-                            .unsqueeze(0)
-                            .repeat(num_choices, 1, 1)
-                        )
+                        both_correct = True
+                        for correct_idx, text_suffix in enumerate(["", "_rev"]):
+                            # Query text embed.
+                            query_text_feats = (
+                                batch[f"{self.clap_variant}_text{text_suffix}"][i]
+                                .to(self.device)
+                                .reshape(1, -1)
+                                .repeat(2, 1)
+                            )
 
-                        # Collect audio choice features: index 0 = correct, index 1+ = incorrect
-                        choice_audio_feats_list = []
-                        choice_parsed_audio_list = []
-                        choice_parsed_mask_list = []
-                        for j, prefix in enumerate(
-                            [f"{self.clap_variant}", "choice_0", "choice_1"]
-                        ):
-                            if j >= num_choices:
+                            # Target audio embed.
+                            audio_feats_list = []
+                            parsed_audio_list = []
+                            parsed_text_list = []
+                            parsed_mask_list = []
+                            for audio_prefix, audio_suffix in [
+                                ("", ""),
+                                ("rev_", "_rev"),
+                            ]:
+                                audio_feats_list.append(
+                                    batch[f"{self.clap_variant}_audio{audio_suffix}"][i]
+                                    .to(self.device)
+                                    .reshape(-1)
+                                )
+                                parsed_audio_list.append(
+                                    batch[
+                                        f"{audio_prefix}{self.clap_variant}_parsed_audio{text_suffix}"
+                                    ][i].to(self.device)
+                                )
+                                parsed_text_list.append(
+                                    batch[
+                                        f"{audio_prefix}{self.clap_variant}_parsed_text{text_suffix}"
+                                    ][i].to(self.device)
+                                )
+                                parsed_mask_list.append(
+                                    batch[
+                                        f"{audio_prefix}{self.clap_variant}_parsed_mask{text_suffix}"
+                                    ][i].to(self.device)
+                                )
+
+                            # Stack all choice features: [num_choices, D]
+                            audio_feats = torch.stack(audio_feats_list, dim=0)
+                            parsed_audio = torch.stack(parsed_audio_list, dim=0)
+                            parsed_text = torch.stack(parsed_text_list, dim=0)
+                            parsed_mask = torch.stack(parsed_mask_list, dim=0)
+
+                            preds = (
+                                self.model(
+                                    audio_feats,
+                                    query_text_feats,
+                                    parsed_audio,
+                                    parsed_text,
+                                    parsed_mask,
+                                    torch.zeros(2, dtype=torch.long).to(self.device),
+                                )
+                                .cpu()
+                                .numpy()
+                            )
+
+                            # Select the choice with highest similarity
+                            pred_choice_idx = int(np.argmax(preds))
+                            if correct_idx != pred_choice_idx:
+                                both_correct = False
                                 break
-                            choice_audio_feats_list.append(
-                                batch[f"{prefix}_audio"][i].to(self.device)
-                            )
-                            choice_parsed_audio_list.append(
-                                batch[f"{prefix}_parsed_audio"][i].to(self.device)
-                            )
-                            choice_parsed_mask_list.append(
-                                batch[f"{prefix}_parsed_mask"][i].to(self.device)
-                            )
 
-                        # Stack all choice features: [num_choices, D]
-                        choice_audio_feats = torch.stack(choice_audio_feats_list, dim=0)
-                        choice_parsed_audio = torch.stack(
-                            choice_parsed_audio_list, dim=0
-                        )
-                        choice_parsed_mask = torch.stack(choice_parsed_mask_list, dim=0)
-
-                        preds = (
-                            self.model(
-                                choice_audio_feats,
-                                query_text_feats,
-                                choice_parsed_audio,
-                                query_parsed_text,
-                                choice_parsed_mask,
-                                torch.zeros(num_choices, dtype=torch.long).to(
-                                    self.device
-                                ),
-                            )
-                            .cpu()
-                            .numpy()
-                        )
-
-                        # Select the choice with highest similarity
-                        pred_choice_idx = int(np.argmax(preds))
-                        batch_pred_choices.append(pred_choice_idx)
-
-                    all_pred_choices.extend(batch_pred_choices)
-
-                all_correct_choices.extend(correct_choice_indices)
+                        all_points += 1 if both_correct else 0
+                        num_samples += 1
 
         return {
             "metrics": {
-                "accuracy": accuracy(
-                    np.array(all_correct_choices), np.array(all_pred_choices)
-                ),
+                "accuracy": all_points / num_samples,
             },
-            "y_list": np.array(all_correct_choices),
-            "y_hat_list": np.array(all_pred_choices),
-            "audio_file_paths": all_audio_file_paths,
+            "y_list": np.zeros(num_samples),
+            "y_hat_list": np.zeros(num_samples),
+            "audio_file_paths": [],
         }
 
     def test(self, save_qualitative: bool = False) -> dict:
@@ -501,7 +509,7 @@ class TTAEval:
                     test_dataset,
                     batch_size=self.batch_size,
                     shuffle=False,
-                    num_workers=4,
+                    num_workers=0,
                 )
                 del test_dataset
 
@@ -588,7 +596,7 @@ def parse_args():
         help="Directory to save/load the model",
     )
     # training params
-    parser.add_argument("--batch_size", type=int, default=32, help="Batch size")
+    parser.add_argument("--batch_size", type=int, default=1, help="Batch size")
     parser.add_argument("--lr", type=float, default=1e-5, help="Learning rate")
     parser.add_argument("--epochs", type=int, default=30, help="Number of epochs")
     parser.add_argument(

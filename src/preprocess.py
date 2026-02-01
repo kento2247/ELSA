@@ -1117,51 +1117,30 @@ def clap_extract(dataloader, feats_dir: str, embedder: CLAPEmbedder):
             text_embeddings,
         )
 
-        incorrect_texts_0 = batch["text_incorrect_0"]
-        incorrect_texts_1 = batch["text_incorrect_1"]
-        incorrect_audios_0 = batch["audio_incorrect_0"]
-        incorrect_audios_1 = batch["audio_incorrect_1"]
-        num_choices = batch["num_choices"]
+        rev_texts = batch["rev_text"]
+        rev_audios = batch["rev_audio"]
         for i, dataset in enumerate(datasets):
             if dataset != "compa":
                 continue
-            assert incorrect_texts_0[i] != "" or incorrect_audios_0[i] != ""
-            is_text_task = incorrect_texts_0[i] != ""
-            if is_text_task:
-                text_choices = (
-                    [incorrect_texts_0[i], incorrect_texts_1[i]]
-                    if num_choices[i] == 3
-                    else [incorrect_texts_0[i]]
-                )
-                text_choices_embeddings = embedder.embed_texts(text_choices)
-                choice_text_file_names = [
-                    f"{text_ids[i]}_{j}.pt" for j in range(len(text_choices))
-                ]
-                save_batch_feats(
-                    feats_dir,
-                    datasets,
-                    f"{embedder.name}_text",
-                    choice_text_file_names,
-                    text_choices_embeddings,
-                )
-            else:
-                audio_choices = (
-                    [incorrect_audios_0[i], incorrect_audios_1[i]]
-                    if num_choices[i] == 3
-                    else [incorrect_audios_0[i]]
-                )
-                audio_choices_embeddings = embedder.embed_audios(audio_choices)
-                choice_audio_file_names = [
-                    os.path.basename(path).replace(".wav", ".pt")
-                    for path in audio_choices
-                ]
-                save_batch_feats(
-                    feats_dir,
-                    datasets,
-                    f"{embedder.name}_audio",
-                    choice_audio_file_names,
-                    audio_choices_embeddings,
-                )
+            assert rev_texts[i] != "" and rev_audios[i] != ""
+            rev_text_embeddings = embedder.embed_texts([rev_texts[i]])
+            rev_audio_embeddings = embedder.embed_audios([rev_audios[i]])
+            rev_text_file_name = f"{text_ids[i]}_rev.pt"
+            rev_audio_file_name = os.path.basename(rev_audios[i]).replace(".wav", ".pt")
+            save_feats(
+                feats_dir=feats_dir,
+                feats_name=f"{embedder.name}_text",
+                dataset=dataset,
+                file_name=rev_text_file_name,
+                feats=rev_text_embeddings,
+            )
+            save_feats(
+                feats_dir=feats_dir,
+                feats_name=f"{embedder.name}_audio",
+                dataset=dataset,
+                file_name=rev_audio_file_name,
+                feats=rev_audio_embeddings,
+            )
 
 
 def text_parse(dataloader, feats_dir: str, text_parser: TextParser):
@@ -1178,13 +1157,12 @@ def text_parse(dataloader, feats_dir: str, text_parser: TextParser):
         texts = batch["text"]
         text_ids = batch["text_id"]
         datasets = batch["dataset"]
-        incorrect_texts_0 = batch["text_incorrect_0"]
-        incorrect_texts_1 = batch["text_incorrect_1"]
+        rev_texts = batch["rev_text"]
 
         # Collect texts that need parsing (not in cache and file doesn't exist)
         to_parse = []
-        for text, text_id, dataset, incorrect_text_0, incorrect_text_1 in zip(
-            texts, text_ids, datasets, incorrect_texts_0, incorrect_texts_1
+        for text, text_id, dataset, rev_text in zip(
+            texts, text_ids, datasets, rev_texts
         ):
             save_path = os.path.join(
                 feats_dir,
@@ -1192,17 +1170,10 @@ def text_parse(dataloader, feats_dir: str, text_parser: TextParser):
                 dataset,
                 f"{text_id}.json",
             )
-            if (
-                save_path
-                == "data/features/gpt_parsed_texts/compa/test_AttributeText_129.json"
-            ):
-                print(save_path)
             if text not in to_parse:
                 to_parse.append(text)
-            if incorrect_text_0 != "" and incorrect_text_0 not in to_parse:
-                to_parse.append(incorrect_text_0)
-            if incorrect_text_1 != "" and incorrect_text_1 not in to_parse:
-                to_parse.append(incorrect_text_1)
+            if rev_text != "" and rev_text not in to_parse:
+                to_parse.append(rev_text)
 
         # Parse unique texts
         if to_parse:
@@ -1211,13 +1182,12 @@ def text_parse(dataloader, feats_dir: str, text_parser: TextParser):
                 cache[text] = result
 
         # Save all texts in batch
-        for text, text_id, dataset, incorrect_text_0, incorrect_text_1 in zip(
-            texts, text_ids, datasets, incorrect_texts_0, incorrect_texts_1
+        for text, text_id, dataset, rev_text in zip(
+            texts, text_ids, datasets, rev_texts
         ):
-            for text_str, prefix in [
+            for text_str, suffix in [
                 (text, ""),
-                (incorrect_text_0, "_0"),
-                (incorrect_text_1, "_1"),
+                (rev_text, "_rev"),
             ]:
                 if text_str == "":
                     continue
@@ -1225,7 +1195,7 @@ def text_parse(dataloader, feats_dir: str, text_parser: TextParser):
                     feats_dir,
                     f"{text_parser.name}_parsed_texts",
                     dataset,
-                    f"{text_id + prefix}.json",
+                    f"{text_id + suffix}.json",
                 )
                 os.makedirs(os.path.dirname(save_path), exist_ok=True)
                 with open(save_path, "w") as f:
@@ -1249,44 +1219,36 @@ def audio_separate(
         text_parser_model: Name of the text parser used for parsing.
         audio_separator: AudioSeparator instance.
     """
-    max_chunk_sec = 10
+    max_chunk_sec = 20
     for batch in tqdm(dataloader, desc="Parsing Audio with Audio Separator"):
         audio_files = batch["audio_file_path"]
         text_ids = batch["text_id"]
         datasets = batch["dataset"]
         texts = batch["text"]
-        incorrect_texts_0 = batch["text_incorrect_0"]
-        incorrect_texts_1 = batch["text_incorrect_1"]
-        incorrect_audios_0 = batch["audio_incorrect_0"]
-        incorrect_audios_1 = batch["audio_incorrect_1"]
+        rev_texts = batch["rev_text"]
+        rev_audios = batch["rev_audio"]
 
         for (
             text_id,
             dataset,
             audio_file,
             text,
-            incorrect_text_0,
-            incorrect_text_1,
-            incorrect_audio_0,
-            incorrect_audio_1,
+            rev_text,
+            rev_audio,
         ) in zip(
             text_ids,
             datasets,
             audio_files,
             texts,
-            incorrect_texts_0,
-            incorrect_texts_1,
-            incorrect_audios_0,
-            incorrect_audios_1,
+            rev_texts,
+            rev_audios,
         ):
             for text_str, suffix_text in [
                 (text, ""),
-                (incorrect_text_0, "_0"),
-                (incorrect_text_1, "_1"),
+                (rev_text, "_rev"),
             ]:
                 if text_str == "":
                     continue
-
                 # Load parsed audio sources
                 text_path = os.path.join(
                     feats_dir,
@@ -1306,12 +1268,7 @@ def audio_separate(
 
                 existing_wavs = [f for f in os.listdir(save_dir) if f.endswith(".wav")]
                 audio_source_count = len(audio_sources)
-                audio_source_count += (
-                    len(audio_sources) if incorrect_audio_0 != "" else 0
-                )
-                audio_source_count += (
-                    len(audio_sources) if incorrect_audio_1 != "" else 0
-                )
+                audio_source_count += len(audio_sources) if rev_audio != "" else 0
                 if len(existing_wavs) == audio_source_count:
                     continue
                 if len(audio_sources) == 0:
@@ -1319,8 +1276,7 @@ def audio_separate(
 
                 for audio_file_path, prefix in [
                     (audio_file, ""),
-                    (incorrect_audio_0, "incorrect_0_"),
-                    (incorrect_audio_1, "incorrect_1_"),
+                    (rev_audio, "rev_"),
                 ]:
                     if audio_file_path == "":
                         continue
@@ -1406,16 +1362,14 @@ def embed_parsed_data(
         text_ids = batch["text_id"]
         datasets = batch["dataset"]
         texts = batch["text"]
-        incorrect_texts_0 = batch["text_incorrect_0"]
-        incorrect_texts_1 = batch["text_incorrect_1"]
+        rev_texts = batch["rev_text"]
 
-        for text_id, dataset, text, incorrect_text_0, incorrect_text_1 in zip(
-            text_ids, datasets, texts, incorrect_texts_0, incorrect_texts_1
+        for text_id, dataset, text, rev_text in zip(
+            text_ids, datasets, texts, rev_texts
         ):
             for text_str, suffix_text in [
                 (text, ""),
-                (incorrect_text_0, "_0"),
-                (incorrect_text_1, "_1"),
+                (rev_text, "_rev"),
             ]:
                 if text_str == "":
                     continue
@@ -1445,26 +1399,16 @@ def embed_parsed_data(
                         if f.endswith(".wav")
                     ]
                 )
-                incorrect_0_files = [
-                    file
-                    for file in all_audio_files
-                    if "incorrect_0_" in file.split("/")[-1]
-                ]
-                incorrect_1_files = [
-                    file
-                    for file in all_audio_files
-                    if "incorrect_1_" in file.split("/")[-1]
+                rev_audio_files = [
+                    file for file in all_audio_files if "rev_" in file.split("/")[-1]
                 ]
                 correct_audio_files = [
-                    file
-                    for file in all_audio_files
-                    if file not in incorrect_0_files and file not in incorrect_1_files
+                    file for file in all_audio_files if file not in rev_audio_files
                 ]
 
                 for audio_files, prefix_audio in [
                     (correct_audio_files, ""),
-                    (incorrect_0_files, "incorrect_0_"),
-                    (incorrect_1_files, "incorrect_1_"),
+                    (rev_audio_files, "rev_"),
                 ]:
                     if len(audio_files) == 0:
                         continue
@@ -1683,29 +1627,29 @@ def main(args):
         clap_extract(dataloader, args.feats_dir, embedder=embedder)
         clear_gpu_memory()
 
-        # if text_parser_model == "gemini":
-        #     text_parser = GeminiTextParser()
-        # elif text_parser_model == "gpt":
-        #     text_parser = GPTTextParser()
-        # elif text_parser_model == "qwen":
-        #     text_parser = QwenTextParser()
+        if text_parser_model == "gemini":
+            text_parser = GeminiTextParser()
+        elif text_parser_model == "gpt":
+            text_parser = GPTTextParser()
+        elif text_parser_model == "qwen":
+            text_parser = QwenTextParser()
 
-        # text_parse(dataloader, args.feats_dir, text_parser=text_parser)
-        # del text_parser
-        # clear_gpu_memory()
+        text_parse(dataloader, args.feats_dir, text_parser=text_parser)
+        del text_parser
+        clear_gpu_memory()
 
-        # if audio_separator_model == "sam_audio":
-        #     audio_separator = SAMAudioSeparator()
-        # elif audio_separator_model == "clapsep":
-        #     audio_separator = CLAPSepSeparator()
-        # elif audio_separator_model == "soloaudio":
-        #     audio_separator = SoloAudioSeparator()
-        # elif audio_separator_model == "audiosep":
-        #     audio_separator = AudioSepSeparator()
+        if audio_separator_model == "sam_audio":
+            audio_separator = SAMAudioSeparator()
+        elif audio_separator_model == "clapsep":
+            audio_separator = CLAPSepSeparator()
+        elif audio_separator_model == "soloaudio":
+            audio_separator = SoloAudioSeparator()
+        elif audio_separator_model == "audiosep":
+            audio_separator = AudioSepSeparator()
 
-        # audio_separate(dataloader, args.feats_dir, audio_separator, text_parser_model)
-        # del audio_separator
-        # clear_gpu_memory()
+        audio_separate(dataloader, args.feats_dir, audio_separator, text_parser_model)
+        del audio_separator
+        clear_gpu_memory()
 
         embed_parsed_data(
             dataloader,
@@ -1716,7 +1660,7 @@ def main(args):
         )
         clear_gpu_memory()
 
-        # create_diff_audio(dataloader, args.feats_dir)
+        create_diff_audio(dataloader, args.feats_dir)
 
 
 ### argument parser ###
@@ -1763,7 +1707,7 @@ def arg_parser():
     parser.add_argument(
         "--clap_model",
         type=str,
-        default="msclap",
+        default="humanclap",
         help="CLAP model to use (humanclap/laionclap/msclap)",
     )
     parser.add_argument(

@@ -69,6 +69,7 @@ class TTADataset(Dataset):
         self.dtype = dtype
         self.pre_load_features = pre_load_features
         self.parsed_seq_size = parsed_seq_size
+        self.subjective_metrics = subjective_metrics
         self.database = []
         for subjective_metric in subjective_metrics:
             if "relate" in dataset_names:
@@ -156,11 +157,8 @@ class TTADataset(Dataset):
                     "text": text,
                     "score": score,
                     "subjective_metric_id": 0 if subjective_metric == "REL" else 1,
-                    "text_incorrect_0": "",  # Not used
-                    "text_incorrect_1": "",  # Not used
-                    "audio_incorrect_0": "",  # Not used
-                    "audio_incorrect_1": "",  # Not used
-                    "num_choices": 0,  # Not used
+                    "rev_text": "",  # Not used
+                    "rev_audio": "",  # Not used
                 }
             )
 
@@ -241,11 +239,8 @@ class TTADataset(Dataset):
                     "text": text,
                     "score": score,
                     "subjective_metric_id": 0 if subjective_metric == "REL" else 1,
-                    "text_incorrect_0": "",  # Not used
-                    "text_incorrect_1": "",  # Not used
-                    "audio_incorrect_0": "",  # Not used
-                    "audio_incorrect_1": "",  # Not used
-                    "num_choices": 0,  # Not used
+                    "rev_text": "",  # Not used
+                    "rev_audio": "",  # Not used
                 }
             )
 
@@ -290,11 +285,8 @@ class TTADataset(Dataset):
                     "text": text,
                     "score": score,
                     "subjective_metric_id": 0 if subjective_metric == "REL" else 1,
-                    "text_incorrect_0": "",  # Not used
-                    "text_incorrect_1": "",  # Not used
-                    "audio_incorrect_0": "",  # Not used
-                    "audio_incorrect_1": "",  # Not used
-                    "num_choices": 0,  # Not used
+                    "rev_text": "",  # Not used
+                    "rev_audio": "",  # Not used
                 }
             )
 
@@ -339,11 +331,8 @@ class TTADataset(Dataset):
                     "text": text,
                     "score": score,
                     "subjective_metric_id": 0 if subjective_metric == "REL" else 1,
-                    "text_incorrect_0": "",  # Not used
-                    "text_incorrect_1": "",  # Not used
-                    "audio_incorrect_0": "",  # Not used
-                    "audio_incorrect_1": "",  # Not used
-                    "num_choices": 0,  # Not used
+                    "rev_text": "",  # Not used
+                    "rev_audio": "",  # Not used
                 }
             )
 
@@ -397,11 +386,8 @@ class TTADataset(Dataset):
                     "text": text,
                     "score": score,
                     "subjective_metric_id": 0 if subjective_metric == "REL" else 1,
-                    "text_incorrect_0": "",  # Not used
-                    "text_incorrect_1": "",  # Not used
-                    "audio_incorrect_0": "",  # Not used
-                    "audio_incorrect_1": "",  # Not used
-                    "num_choices": 0,  # Not used
+                    "rev_text": "",  # Not used
+                    "rev_audio": "",  # Not used
                 }
             )
 
@@ -446,11 +432,8 @@ class TTADataset(Dataset):
                     "text": text,
                     "score": score,
                     "subjective_metric_id": 0 if subjective_metric == "REL" else 1,
-                    "text_incorrect_0": "",  # Not used
-                    "text_incorrect_1": "",  # Not used
-                    "audio_incorrect_0": "",  # Not used
-                    "audio_incorrect_1": "",  # Not used
-                    "num_choices": 0,  # Not used
+                    "rev_text": "",  # Not used
+                    "rev_audio": "",  # Not used
                 }
             )
 
@@ -512,11 +495,8 @@ class TTADataset(Dataset):
                     "text": text,
                     "score": score,
                     "subjective_metric_id": 0 if subjective_metric == "REL" else 1,
-                    "text_incorrect_0": "",  # Not used
-                    "text_incorrect_1": "",  # Not used
-                    "audio_incorrect_0": "",  # Not used
-                    "audio_incorrect_1": "",  # Not used
-                    "num_choices": 0,  # Not used
+                    "rev_text": "",  # Not used
+                    "rev_audio": "",  # Not used
                 }
             )
 
@@ -544,8 +524,6 @@ class TTADataset(Dataset):
             attribute_csv_path = os.path.join(
                 self.data_dir, "CompA_attribute", "Compa-Attribute.csv"
             )
-            if not os.path.exists(attribute_csv_path):
-                return
 
             attribute_data = pd.read_csv(attribute_csv_path)
             attribute_files_dir = os.path.join(
@@ -569,50 +547,24 @@ class TTADataset(Dataset):
                 text_1 = row["pair_caption"]
                 text_2 = row["reversed_pair_caption"]
 
-                # For AttributeText: audio -> text (correct answer is text_1 for audio_file_1)
-                # For AttributeAudio: text -> audio (correct answer is audio_file_1 for text_1)
-                if subjective_metric == "AttributeText":
-                    # Task: Given audio_file_1, choose between text_1 and text_2
-                    data_item = {
-                        "dataset": "compa",
-                        "text_id": text_id,
-                        "audio_file_path": audio_file_1,  # Correct audio
-                        "ref_audio_file_path": "",  # Not used
-                        "text": text_1,
-                        "score": 0.0,  # Not used for classification
-                        "subjective_metric_id": 0,  # Not used
-                        "text_incorrect_0": text_2,  # Incorrect choice
-                        "text_incorrect_1": "",
-                        "audio_incorrect_0": "",  # Not used
-                        "audio_incorrect_1": "",  # Not used
-                        "num_choices": 2,
-                    }
-                    self.database.append(data_item)
-                elif subjective_metric == "AttributeAudio":
-                    # Task: Given text_1, choose between audio_file_1 and audio_file_2
-                    data_item = {
-                        "dataset": "compa",
-                        "text_id": text_id,
-                        "audio_file_path": audio_file_1,  # Correct audio
-                        "ref_audio_file_path": "",  # Not used
-                        "text": text_1,
-                        "score": 0.0,  # Not used for classification
-                        "subjective_metric_id": 0,  # Not used
-                        "text_incorrect_0": "",  # Incorrect choice
-                        "text_incorrect_1": "",
-                        "audio_incorrect_0": audio_file_2,  # Incorrect choice
-                        "audio_incorrect_1": "",  # Not used
-                        "num_choices": 2,
-                    }
-                    self.database.append(data_item)
+                data_item = {
+                    "dataset": "compa",
+                    "text_id": text_id,
+                    "audio_file_path": audio_file_1,  # Correct audio
+                    "ref_audio_file_path": "",  # Not used
+                    "text": text_1,
+                    "score": 0.0,  # Not used for classification
+                    "subjective_metric_id": 0,  # Not used
+                    "rev_text": text_2,  # Incorrect choice
+                    "rev_audio": audio_file_2,  # Incorrect choice
+                }
+                self.database.append(data_item)
 
         # Load Order dataset
         if subjective_metric in ["OrderText", "OrderAudio"]:
             order_csv_path = os.path.join(
                 self.data_dir, "CompA_order", "CompA_order_benchmark.csv"
             )
-            if not os.path.exists(order_csv_path):
-                return
 
             order_data = pd.read_csv(order_csv_path)
             order_files_dir = os.path.join(
@@ -634,59 +586,18 @@ class TTADataset(Dataset):
                 text_1 = row["pair_caption"]
                 text_2 = row["reversed_pair_caption"]
 
-                # Check if triplet exists
-                has_triplet = (
-                    pd.notna(row.get("triplet_caption"))
-                    and row.get("triplet_caption") != "-"
-                    and pd.notna(row.get("triplet_file"))
-                    and row.get("triplet_file") != "-"
-                )
-
-                if has_triplet:
-                    audio_file_3 = os.path.join(order_files_dir, row["triplet_file"])
-                    text_3 = row["triplet_caption"]
-                else:
-                    audio_file_3 = None
-                    text_3 = None
-
-                # For OrderText: audio -> text (correct answer is text_1 for audio_file_1)
-                # For OrderAudio: text -> audio (correct answer is audio_file_1 for text_1)
-                if subjective_metric == "OrderText":
-                    # Task: Given audio_file_1, choose between text_1, text_2, (and text_3)
-                    data_item = {
-                        "dataset": "compa",
-                        "text_id": text_id,
-                        "audio_file_path": audio_file_1,  # Correct audio
-                        "ref_audio_file_path": "",  # Not used
-                        "text": text_1,
-                        "score": 0.0,  # Not used for classification
-                        "subjective_metric_id": 0,  # Not used
-                        "text_incorrect_0": text_2,  # Incorrect choice
-                        "text_incorrect_1": text_3
-                        if has_triplet
-                        else "",  # Additional incorrect choice
-                        "audio_incorrect_0": "",  # Not used
-                        "audio_incorrect_1": "",  # Not used
-                        "num_choices": 2 if not has_triplet else 3,
-                    }
-                    self.database.append(data_item)
-                elif subjective_metric == "OrderAudio":
-                    # Task: Given text_1, choose between audio_file_1, audio_file_2, (and audio_file_3)
-                    data_item = {
-                        "dataset": "compa",
-                        "text_id": text_id,
-                        "audio_file_path": audio_file_1,  # Correct audio
-                        "ref_audio_file_path": "",  # Not used
-                        "text": text_1,
-                        "score": 0.0,  # Not used for classification
-                        "subjective_metric_id": 0,  # Not used
-                        "text_incorrect_0": "",  # Not used
-                        "text_incorrect_1": "",  # Not used
-                        "audio_incorrect_0": audio_file_2,  # Incorrect choice
-                        "audio_incorrect_1": audio_file_3 if has_triplet else "",
-                        "num_choices": 2 if not has_triplet else 3,
-                    }
-                    self.database.append(data_item)
+                data_item = {
+                    "dataset": "compa",
+                    "text_id": text_id,
+                    "audio_file_path": audio_file_1,  # Correct audio
+                    "ref_audio_file_path": "",  # Not used
+                    "text": text_1,
+                    "score": 0.0,  # Not used for classification
+                    "subjective_metric_id": 0,  # Not used
+                    "rev_text": text_2,  # Incorrect choice
+                    "rev_audio": audio_file_2,  # Incorrect choice
+                }
+                self.database.append(data_item)
 
     def _load_wav(self, file_path: str) -> torch.Tensor:
         """Load wav file based on dataset and filename."""
@@ -775,86 +686,86 @@ class TTADataset(Dataset):
 
         # Load CompA choice features if this is a CompA dataset
         if dataset_name == "compa":
-            text_incorrect_0 = data.get("text_incorrect_0", "")
-            text_incorrect_1 = data.get("text_incorrect_1", "")
-            audio_incorrect_0 = data.get("audio_incorrect_0", "")
-            audio_incorrect_1 = data.get("audio_incorrect_1", "")
-
-            # Load text choice features for AttributeText/OrderText tasks
-            for i, text_str in enumerate([text_incorrect_0, text_incorrect_1]):
-                if text_str != "":
-                    data[f"choice_{i}_text"] = self._load_pre_extracted_feats(
-                        feats_name=f"{clap_variant}_text",
-                        dataset_name=dataset_name,
-                        file_name=f"{data['text_id']}_{i}.pt",
-                    )
-                    data[f"choice_{i}_parsed_text"] = self._pad_or_truncate_feats(
-                        self._load_pre_extracted_feats(
-                            feats_name=f"{clap_variant}_parsed_text",
-                            dataset_name=dataset_name,
-                            file_name=f"{data['text_id']}_{i}.pt",
-                            dim=laionclap_dim,
-                        )
-                    )
-                    data[f"choice_{i}_parsed_mask"] = self._pad_or_truncate_mask(
-                        self._load_pre_extracted_mask(
-                            feats_name=f"{clap_variant}_parsed_mask",
-                            dataset_name=dataset_name,
-                            file_name=f"{data['text_id']}_{i}.pt",
-                        )
-                    )
-                else:
-                    data[f"choice_{i}_text"] = torch.zeros_like(
-                        data[f"{clap_variant}_text"]
-                    )
-                    data[f"choice_{i}_parsed_text"] = torch.zeros_like(
-                        data[f"{clap_variant}_parsed_text"]
-                    )
-                    data[f"choice_{i}_parsed_mask"] = torch.zeros_like(
-                        data[f"{clap_variant}_parsed_mask"]
-                    )
-
-            # Load audio choice features for AttributeAudio/OrderAudio tasks
-            for i, audio_file_path in enumerate([audio_incorrect_0, audio_incorrect_1]):
-                if audio_file_path != "":
-                    audio_file_path = os.path.basename(audio_file_path).replace(
-                        ".wav", ".pt"
-                    )
-                    data[f"choice_{i}_audio"] = self._load_pre_extracted_feats(
-                        feats_name=f"{clap_variant}_audio",
-                        dataset_name=dataset_name,
-                        file_name=audio_file_path,
-                    )
-                    data[f"choice_{i}_parsed_audio"] = (
-                        self._pad_or_truncate_feats(
-                            self._load_pre_extracted_feats(
-                                feats_name=f"{clap_variant}_parsed_audio",
-                                dataset_name=dataset_name,
-                                file_name=f"incorrect_{i}_{data['text_id']}.pt",
-                                dim=laionclap_dim,
-                            )
-                        )
-                    )
-                    data[f"choice_{i}_parsed_mask"] = self._pad_or_truncate_mask(
-                        self._load_pre_extracted_mask(
-                            feats_name=f"{clap_variant}_parsed_mask",
-                            dataset_name=dataset_name,
-                            file_name=f"incorrect_{i}_{data['text_id']}.pt",
-                        )
-                    )
-                else:
-                    data[f"choice_{i}_audio"] = torch.zeros_like(
-                        data[f"{clap_variant}_audio"]
-                    )
-                    data[f"choice_{i}_parsed_audio"] = torch.zeros_like(
-                        data[f"{clap_variant}_parsed_audio"]
-                    )
-                    data[f"choice_{i}_parsed_mask"] = torch.zeros_like(
-                        data[f"{clap_variant}_parsed_mask"]
-                    )
-
-            # Set correct choice index (always 0 for CompA)
-            data["correct_choice_idx"] = 0
+            rev_audio = data["rev_audio"]
+            rev_audio_file_name = os.path.basename(rev_audio).replace(".wav", ".pt")
+            # Rev Audio embed.
+            data[f"{clap_variant}_audio_rev"] = self._load_pre_extracted_feats(
+                feats_name=f"{clap_variant}_audio",
+                dataset_name=dataset_name,
+                file_name=rev_audio_file_name,
+            )
+            # Rev Text embed.
+            data[f"{clap_variant}_text_rev"] = self._load_pre_extracted_feats(
+                feats_name=f"{clap_variant}_text",
+                dataset_name=dataset_name,
+                file_name=f"{data['text_id']}_rev.pt",
+            )
+            # Rev Text -> Audio parsed embed.
+            data[f"{clap_variant}_parsed_audio_rev"] = self._pad_or_truncate_feats(
+                self._load_pre_extracted_feats(
+                    feats_name=f"{clap_variant}_parsed_audio",
+                    dataset_name=dataset_name,
+                    file_name=f"{data['text_id']}_rev.pt",
+                )
+            )
+            data[f"{clap_variant}_parsed_text_rev"] = self._pad_or_truncate_feats(
+                self._load_pre_extracted_feats(
+                    feats_name=f"{clap_variant}_parsed_text",
+                    dataset_name=dataset_name,
+                    file_name=f"{data['text_id']}_rev.pt",
+                )
+            )
+            data[f"{clap_variant}_parsed_mask_rev"] = self._pad_or_truncate_mask(
+                self._load_pre_extracted_mask(
+                    feats_name=f"{clap_variant}_parsed_mask",
+                    dataset_name=dataset_name,
+                    file_name=f"{data['text_id']}_rev.pt",
+                )
+            )
+            # Text -> Rev Audio parsed embed.
+            data[f"rev_{clap_variant}_parsed_audio"] = self._pad_or_truncate_feats(
+                self._load_pre_extracted_feats(
+                    feats_name=f"{clap_variant}_parsed_audio",
+                    dataset_name=dataset_name,
+                    file_name=f"rev_{data['text_id']}.pt",
+                )
+            )
+            data[f"rev_{clap_variant}_parsed_text"] = self._pad_or_truncate_feats(
+                self._load_pre_extracted_feats(
+                    feats_name=f"{clap_variant}_parsed_text",
+                    dataset_name=dataset_name,
+                    file_name=f"rev_{data['text_id']}.pt",
+                )
+            )
+            data[f"rev_{clap_variant}_parsed_mask"] = self._pad_or_truncate_mask(
+                self._load_pre_extracted_mask(
+                    feats_name=f"{clap_variant}_parsed_mask",
+                    dataset_name=dataset_name,
+                    file_name=f"rev_{data['text_id']}.pt",
+                )
+            )
+            # Rev Text -> Rev Audio parsed embed.
+            data[f"rev_{clap_variant}_parsed_audio_rev"] = self._pad_or_truncate_feats(
+                self._load_pre_extracted_feats(
+                    feats_name=f"{clap_variant}_parsed_audio",
+                    dataset_name=dataset_name,
+                    file_name=f"rev_{data['text_id']}_rev.pt",
+                )
+            )
+            data[f"rev_{clap_variant}_parsed_text_rev"] = self._pad_or_truncate_feats(
+                self._load_pre_extracted_feats(
+                    feats_name=f"{clap_variant}_parsed_text",
+                    dataset_name=dataset_name,
+                    file_name=f"rev_{data['text_id']}_rev.pt",
+                )
+            )
+            data[f"rev_{clap_variant}_parsed_mask_rev"] = self._pad_or_truncate_mask(
+                self._load_pre_extracted_mask(
+                    feats_name=f"{clap_variant}_parsed_mask",
+                    dataset_name=dataset_name,
+                    file_name=f"rev_{data['text_id']}_rev.pt",
+                )
+            )
 
         return data
 
