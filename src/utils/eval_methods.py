@@ -6,7 +6,9 @@ import numpy as np
 from scipy import stats
 
 
-def _validate_inputs(y_true: np.ndarray, y_pred: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def _validate_inputs(
+    y_true: np.ndarray, y_pred: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
     """
     入力配列からnan/infを含む要素を除外する
     """

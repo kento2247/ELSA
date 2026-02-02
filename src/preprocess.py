@@ -1074,6 +1074,7 @@ def clear_gpu_memory():
 def clap_extract(dataloader, feats_dir: str, embedder: CLAPEmbedder):
     """
     Extract CLAP features for audio and text in the dataloader.
+    For CompA dataset, also extract features for all choice options.
     Args:
         dataloader: DataLoader for the dataset.
         feats_dir: Directory to save features.
@@ -1091,18 +1092,13 @@ def clap_extract(dataloader, feats_dir: str, embedder: CLAPEmbedder):
         text_file_names = [f"{text_id}.pt" for text_id in text_ids]
 
         if check_all_file_exists(
-            datasets,
-            audio_files,
-            feats_dir,
-            f"{embedder.name}_audio",
+            datasets, audio_files, feats_dir, f"{embedder.name}_audio"
         ) and check_all_file_exists(
-            datasets,
-            text_file_names,
-            feats_dir,
-            f"{embedder.name}_text",
+            datasets, text_file_names, feats_dir, f"{embedder.name}_text"
         ):
             continue
 
+        # Extract main features
         audio_embeddings = embedder.embed_audios(audio_files)
         text_embeddings = embedder.embed_texts(texts)
 
@@ -1121,6 +1117,31 @@ def clap_extract(dataloader, feats_dir: str, embedder: CLAPEmbedder):
             text_embeddings,
         )
 
+        rev_texts = batch["rev_text"]
+        rev_audios = batch["rev_audio"]
+        for i, dataset in enumerate(datasets):
+            if dataset != "compa":
+                continue
+            assert rev_texts[i] != "" and rev_audios[i] != ""
+            rev_text_embeddings = embedder.embed_texts([rev_texts[i]])
+            rev_audio_embeddings = embedder.embed_audios([rev_audios[i]])
+            rev_text_file_name = f"{text_ids[i]}_rev.pt"
+            rev_audio_file_name = os.path.basename(rev_audios[i]).replace(".wav", ".pt")
+            save_feats(
+                feats_dir=feats_dir,
+                feats_name=f"{embedder.name}_text",
+                dataset=dataset,
+                file_name=rev_text_file_name,
+                feats=rev_text_embeddings,
+            )
+            save_feats(
+                feats_dir=feats_dir,
+                feats_name=f"{embedder.name}_audio",
+                dataset=dataset,
+                file_name=rev_audio_file_name,
+                feats=rev_audio_embeddings,
+            )
+
 
 def text_parse(dataloader, feats_dir: str, text_parser: TextParser):
     """
@@ -1136,41 +1157,49 @@ def text_parse(dataloader, feats_dir: str, text_parser: TextParser):
         texts = batch["text"]
         text_ids = batch["text_id"]
         datasets = batch["dataset"]
+        rev_texts = batch["rev_text"]
 
         # Collect texts that need parsing (not in cache and file doesn't exist)
         to_parse = []
-        for text, text_id, dataset in zip(texts, text_ids, datasets):
+        for text, text_id, dataset, rev_text in zip(
+            texts, text_ids, datasets, rev_texts
+        ):
             save_path = os.path.join(
                 feats_dir,
                 f"{text_parser.name}_parsed_texts",
                 dataset,
                 f"{text_id}.json",
             )
-            if os.path.exists(save_path) or text in cache:
-                continue
-            if text not in [t for t, _, _ in to_parse]:
-                to_parse.append((text, text_id, dataset))
+            if text not in to_parse:
+                to_parse.append(text)
+            if rev_text != "" and rev_text not in to_parse:
+                to_parse.append(rev_text)
 
         # Parse unique texts
         if to_parse:
-            unique_texts = [t for t, _, _ in to_parse]
-            results = text_parser.parse_texts(unique_texts)
-            for text, result in zip(unique_texts, results):
+            results = text_parser.parse_texts(to_parse)
+            for text, result in zip(to_parse, results):
                 cache[text] = result
 
         # Save all texts in batch
-        for text, text_id, dataset in zip(texts, text_ids, datasets):
-            save_path = os.path.join(
-                feats_dir,
-                f"{text_parser.name}_parsed_texts",
-                dataset,
-                f"{text_id}.json",
-            )
-            if os.path.exists(save_path):
-                continue
-            os.makedirs(os.path.dirname(save_path), exist_ok=True)
-            with open(save_path, "w") as f:
-                json.dump(cache[text], f, ensure_ascii=False, indent=0)
+        for text, text_id, dataset, rev_text in zip(
+            texts, text_ids, datasets, rev_texts
+        ):
+            for text_str, suffix in [
+                (text, ""),
+                (rev_text, "_rev"),
+            ]:
+                if text_str == "":
+                    continue
+                save_path = os.path.join(
+                    feats_dir,
+                    f"{text_parser.name}_parsed_texts",
+                    dataset,
+                    f"{text_id + suffix}.json",
+                )
+                os.makedirs(os.path.dirname(save_path), exist_ok=True)
+                with open(save_path, "w") as f:
+                    json.dump(cache[text_str], f, ensure_ascii=False, indent=0)
 
 
 def audio_separate(
@@ -1190,91 +1219,128 @@ def audio_separate(
         text_parser_model: Name of the text parser used for parsing.
         audio_separator: AudioSeparator instance.
     """
-    max_chunk_sec = 10
+    max_chunk_sec = 20
     for batch in tqdm(dataloader, desc="Parsing Audio with Audio Separator"):
         audio_files = batch["audio_file_path"]
         text_ids = batch["text_id"]
         datasets = batch["dataset"]
+        texts = batch["text"]
+        rev_texts = batch["rev_text"]
+        rev_audios = batch["rev_audio"]
 
-        for text_id, dataset, audio_file in zip(text_ids, datasets, audio_files):
-            # Load parsed audio sources
-            text_path = os.path.join(
-                feats_dir,
-                f"{text_parser_model}_parsed_texts",
-                dataset,
-                f"{text_id}.json",
-            )
-            with open(text_path, "r", encoding="utf-8") as f:
-                audio_sources = json.load(f)
-            save_dir = os.path.join(
-                feats_dir, f"{audio_separator.name}_separated_audio", dataset, text_id
-            )
-            os.makedirs(save_dir, exist_ok=True)
-
-            existing_wavs = [f for f in os.listdir(save_dir) if f.endswith(".wav")]
-            if len(existing_wavs) == len(audio_sources):
-                continue
-            if len(audio_sources) == 0:
-                continue
-
-            audio_info = torchaudio.info(audio_file)
-            duration_sec = audio_info.num_frames / audio_info.sample_rate
-
-            if duration_sec <= max_chunk_sec:
-                # Split audio using SAM-Audio with automatic mixed precision
-                with torch.amp.autocast("cuda"):
-                    separated_audios: list[torch.Tensor] = (
-                        audio_separator.separate_audio(audio_file, audio_sources)
-                    )
-
-                # Save separated audio files
-                for i, audio_tensor in enumerate(separated_audios):
-                    save_path = os.path.join(save_dir, f"{i}.wav")
-                    audio_separator.save_audio(save_path, audio_tensor)
-                continue
-
-            # Long audio: chunk -> SAM -> stitch per prompt
-            audio, sr = torchaudio.load(audio_file)
-            target_sr = audio_separator.sample_rate
-            if sr != target_sr:
-                resampler = torchaudio.transforms.Resample(sr, target_sr)
-                audio = resampler(audio)
-                sr = target_sr
-
-            samples_per_chunk = int(sr * max_chunk_sec)
-            total_samples = audio.shape[-1]
-            chunk_dir = os.path.join(save_dir, "chunks")
-            os.makedirs(chunk_dir, exist_ok=True)
-
-            chunk_paths = []
-            for chunk_idx, start in enumerate(
-                range(0, total_samples, samples_per_chunk)
-            ):
-                end = min(start + samples_per_chunk, total_samples)
-                if end <= start:
+        for (
+            text_id,
+            dataset,
+            audio_file,
+            text,
+            rev_text,
+            rev_audio,
+        ) in zip(
+            text_ids,
+            datasets,
+            audio_files,
+            texts,
+            rev_texts,
+            rev_audios,
+        ):
+            for text_str, suffix_text in [
+                (text, ""),
+                (rev_text, "_rev"),
+            ]:
+                if text_str == "":
                     continue
-                chunk_audio = audio[..., start:end]
-                chunk_path = os.path.join(chunk_dir, f"{chunk_idx}.wav")
-                torchaudio.save(chunk_path, chunk_audio, sr)
-                chunk_paths.append(chunk_path)
+                # Load parsed audio sources
+                text_path = os.path.join(
+                    feats_dir,
+                    f"{text_parser_model}_parsed_texts",
+                    dataset,
+                    f"{text_id + suffix_text}.json",
+                )
+                with open(text_path, "r", encoding="utf-8") as f:
+                    audio_sources = json.load(f)
+                save_dir = os.path.join(
+                    feats_dir,
+                    f"{audio_separator.name}_separated_audio",
+                    dataset,
+                    text_id + suffix_text,
+                )
+                os.makedirs(save_dir, exist_ok=True)
 
-            stitched: list[list[torch.Tensor]] = [[] for _ in audio_sources]
-            for chunk_path in chunk_paths:
-                with torch.amp.autocast("cuda"):
-                    chunk_separated = audio_separator.separate_audio(
-                        chunk_path, audio_sources
-                    )
-                for i, audio_tensor in enumerate(chunk_separated):
-                    if audio_tensor.dim() == 1:
-                        audio_tensor = audio_tensor.unsqueeze(0)
-                    stitched[i].append(audio_tensor.detach().cpu())
-
-            for i, parts in enumerate(stitched):
-                if len(parts) == 0:
+                existing_wavs = [f for f in os.listdir(save_dir) if f.endswith(".wav")]
+                audio_source_count = len(audio_sources)
+                audio_source_count += len(audio_sources) if rev_audio != "" else 0
+                if len(existing_wavs) == audio_source_count:
                     continue
-                merged = torch.cat(parts, dim=-1)
-                save_path = os.path.join(save_dir, f"{i}.wav")
-                audio_separator.save_audio(save_path, merged)
+                if len(audio_sources) == 0:
+                    continue
+
+                for audio_file_path, prefix in [
+                    (audio_file, ""),
+                    (rev_audio, "rev_"),
+                ]:
+                    if audio_file_path == "":
+                        continue
+
+                    audio_info = torchaudio.info(audio_file_path)
+                    duration_sec = audio_info.num_frames / audio_info.sample_rate
+
+                    if duration_sec <= max_chunk_sec:
+                        # Split audio using SAM-Audio with automatic mixed precision
+                        with torch.amp.autocast("cuda"):
+                            separated_audios: list[torch.Tensor] = (
+                                audio_separator.separate_audio(
+                                    audio_file_path, audio_sources
+                                )
+                            )
+
+                        # Save separated audio files
+                        for i, audio_tensor in enumerate(separated_audios):
+                            save_path = os.path.join(save_dir, f"{prefix}{i}.wav")
+                            audio_separator.save_audio(save_path, audio_tensor)
+                        continue
+
+                    # Long audio: chunk -> SAM -> stitch per prompt
+                    audio, sr = torchaudio.load(audio_file_path)
+                    target_sr = audio_separator.sample_rate
+                    if sr != target_sr:
+                        resampler = torchaudio.transforms.Resample(sr, target_sr)
+                        audio = resampler(audio)
+                        sr = target_sr
+
+                    samples_per_chunk = int(sr * max_chunk_sec)
+                    total_samples = audio.shape[-1]
+                    chunk_dir = os.path.join(save_dir, "chunks")
+                    os.makedirs(chunk_dir, exist_ok=True)
+
+                    chunk_paths = []
+                    for chunk_idx, start in enumerate(
+                        range(0, total_samples, samples_per_chunk)
+                    ):
+                        end = min(start + samples_per_chunk, total_samples)
+                        if end <= start:
+                            continue
+                        chunk_audio = audio[..., start:end]
+                        chunk_path = os.path.join(chunk_dir, f"{prefix}{chunk_idx}.wav")
+                        torchaudio.save(chunk_path, chunk_audio, sr)
+                        chunk_paths.append(chunk_path)
+
+                    stitched: list[list[torch.Tensor]] = [[] for _ in audio_sources]
+                    for chunk_path in chunk_paths:
+                        with torch.amp.autocast("cuda"):
+                            chunk_separated = audio_separator.separate_audio(
+                                chunk_path, audio_sources
+                            )
+                        for i, audio_tensor in enumerate(chunk_separated):
+                            if audio_tensor.dim() == 1:
+                                audio_tensor = audio_tensor.unsqueeze(0)
+                            stitched[i].append(audio_tensor.detach().cpu())
+
+                    for i, parts in enumerate(stitched):
+                        if len(parts) == 0:
+                            continue
+                        merged = torch.cat(parts, dim=-1)
+                        save_path = os.path.join(save_dir, f"{prefix}{i}.wav")
+                        audio_separator.save_audio(save_path, merged)
 
 
 def embed_parsed_data(
@@ -1295,92 +1361,120 @@ def embed_parsed_data(
     for batch in tqdm(dataloader, desc="Embedding Parsed Audio Segments"):
         text_ids = batch["text_id"]
         datasets = batch["dataset"]
+        texts = batch["text"]
+        rev_texts = batch["rev_text"]
 
-        for text_id, dataset in zip(text_ids, datasets):
-            # Load parsed audio sources
-            text_path = os.path.join(
-                feats_dir,
-                f"{text_parser_model}_parsed_texts",
-                dataset,
-                f"{text_id}.json",
-            )
-            with open(text_path, "r", encoding="utf-8") as f:
-                audio_sources: list[str] = json.load(f)
+        for text_id, dataset, text, rev_text in zip(
+            text_ids, datasets, texts, rev_texts
+        ):
+            for text_str, suffix_text in [
+                (text, ""),
+                (rev_text, "_rev"),
+            ]:
+                if text_str == "":
+                    continue
 
-            # Load separated audio files
-            audio_dir = os.path.join(
-                feats_dir, f"{audio_separator_model}_separated_audio", dataset, text_id
-            )
-            audio_files = sorted(
-                [
-                    os.path.join(audio_dir, f)
-                    for f in os.listdir(audio_dir)
-                    if f.endswith(".wav")
+                # Load parsed audio sources
+                text_path = os.path.join(
+                    feats_dir,
+                    f"{text_parser_model}_parsed_texts",
+                    dataset,
+                    f"{text_id + suffix_text}.json",
+                )
+                with open(text_path, "r", encoding="utf-8") as f:
+                    audio_sources: list[str] = json.load(f)
+
+                # Load separated audio files
+                audio_dir = os.path.join(
+                    feats_dir,
+                    f"{audio_separator_model}_separated_audio",
+                    dataset,
+                    text_id + suffix_text,
+                )
+
+                all_audio_files = sorted(
+                    [
+                        os.path.join(audio_dir, f)
+                        for f in os.listdir(audio_dir)
+                        if f.endswith(".wav")
+                    ]
+                )
+                rev_audio_files = [
+                    file for file in all_audio_files if "rev_" in file.split("/")[-1]
                 ]
-            )
+                correct_audio_files = [
+                    file for file in all_audio_files if file not in rev_audio_files
+                ]
 
-            if len(audio_files) == 0 and len(audio_sources) == 0:
-                continue
-            if not len(audio_files) == len(audio_sources):
-                raise ValueError(
-                    f"Number of separated audio files ({len(audio_files)}) does not match number of audio sources ({len(audio_sources)}) for {text_id} in {dataset}."
-                )
+                for audio_files, prefix_audio in [
+                    (correct_audio_files, ""),
+                    (rev_audio_files, "rev_"),
+                ]:
+                    if len(audio_files) == 0:
+                        continue
+                    if not len(audio_files) == len(audio_sources):
+                        raise ValueError(
+                            f"Number of separated audio files ({len(audio_files)}) does not match number of audio sources ({len(audio_sources)}) for {text_id} in {dataset}."
+                        )
 
-            # Embed audio and text
-            audio_embeddings = embedder.embed_audios(audio_files)  # [N, D]
-            text_embeddings = embedder.embed_texts(audio_sources)  # [N, D]
+                    # Embed audio and text
+                    audio_embeddings = embedder.embed_audios(
+                        audio_files
+                    )  # [N * num_choices, D]
+                    text_embeddings = embedder.embed_texts(audio_sources)  # [N, D]
 
-            num_segments = audio_embeddings.shape[0]
-            embed_dim = audio_embeddings.shape[-1]
+                    num_segments = text_embeddings.shape[0]
+                    embed_dim = text_embeddings.shape[-1]
 
-            # Create mask for valid positions
-            mask = torch.zeros(seq_size, dtype=torch.bool)
-            valid_len = min(num_segments, seq_size)
-            mask[:valid_len] = True
+                    # Create mask for valid positions
+                    mask = torch.zeros(seq_size, dtype=torch.bool)
+                    valid_len = min(num_segments, seq_size)
+                    mask[:valid_len] = True
 
-            # Pad or truncate to seq_size
-            if num_segments < seq_size:
-                pad_size = seq_size - num_segments
-                audio_pad = torch.zeros(
-                    pad_size,
-                    embed_dim,
-                    device=audio_embeddings.device,
-                    dtype=audio_embeddings.dtype,
-                )
-                text_pad = torch.zeros(
-                    pad_size,
-                    embed_dim,
-                    device=text_embeddings.device,
-                    dtype=text_embeddings.dtype,
-                )
-                audio_embeddings = torch.cat([audio_embeddings, audio_pad], dim=0)
-                text_embeddings = torch.cat([text_embeddings, text_pad], dim=0)
-            else:
-                audio_embeddings = audio_embeddings[:seq_size]
-                text_embeddings = text_embeddings[:seq_size]
+                    # Pad or truncate to seq_size
+                    if num_segments < seq_size:
+                        pad_size = seq_size - num_segments
+                        audio_pad = torch.zeros(
+                            pad_size,
+                            embed_dim,
+                            device=audio_embeddings.device,
+                            dtype=audio_embeddings.dtype,
+                        )
+                        text_pad = torch.zeros(
+                            pad_size,
+                            embed_dim,
+                            device=text_embeddings.device,
+                            dtype=text_embeddings.dtype,
+                        )
+                        audio_embeddings = torch.cat(
+                            [audio_embeddings, audio_pad], dim=0
+                        )
+                        text_embeddings = torch.cat([text_embeddings, text_pad], dim=0)
+                    else:
+                        text_embeddings = text_embeddings[:seq_size]
 
-            # Save embeddings and mask
-            save_feats(
-                feats_dir=feats_dir,
-                feats_name=f"{embedder.name}_parsed_audio",
-                dataset=dataset,
-                file_name=f"{text_id}.pt",
-                feats=audio_embeddings,
-            )
-            save_feats(
-                feats_dir=feats_dir,
-                feats_name=f"{embedder.name}_parsed_text",
-                dataset=dataset,
-                file_name=f"{text_id}.pt",
-                feats=text_embeddings,
-            )
-            save_feats(
-                feats_dir=feats_dir,
-                feats_name=f"{embedder.name}_parsed_mask",
-                dataset=dataset,
-                file_name=f"{text_id}.pt",
-                feats=mask,
-            )
+                    # Save embeddings and mask
+                    save_feats(
+                        feats_dir=feats_dir,
+                        feats_name=f"{embedder.name}_parsed_audio",
+                        dataset=dataset,
+                        file_name=f"{prefix_audio}{text_id}{suffix_text}.pt",
+                        feats=audio_embeddings,
+                    )
+                    save_feats(
+                        feats_dir=feats_dir,
+                        feats_name=f"{embedder.name}_parsed_text",
+                        dataset=dataset,
+                        file_name=f"{prefix_audio}{text_id}{suffix_text}.pt",
+                        feats=text_embeddings,
+                    )
+                    save_feats(
+                        feats_dir=feats_dir,
+                        feats_name=f"{embedder.name}_parsed_mask",
+                        dataset=dataset,
+                        file_name=f"{prefix_audio}{text_id}{suffix_text}.pt",
+                        feats=mask,
+                    )
 
 
 def create_diff_audio(dataloader, feats_dir: str):
