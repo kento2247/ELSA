@@ -1623,7 +1623,12 @@ def main(args):
         return
 
     for split in args.splits:
-        dataset = TTAPreprocessDataset(data_dir=args.data_dir, split=split)
+        dataset = TTAPreprocessDataset(
+            data_dir=args.data_dir,
+            split=split,
+            subjective_metrics=args.subjective_metrics,
+            dataset_names=args.dataset_names,
+        )
         dataloader = DataLoader(dataset, batch_size=args.bs, shuffle=False)
 
         clap_extract(dataloader, args.feats_dir, embedder=embedder)
