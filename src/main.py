@@ -476,10 +476,8 @@ class TTAEval:
                 eval_result = self.evaluate(test_loader, desc=desc)
                 eval_metrics = eval_result["metrics"]
 
-                if subjective_metric not in metrics:
-                    metrics[subjective_metric] = {}
-                if subjective_metric not in scores:
-                    scores[subjective_metric] = {}
+                metrics.setdefault(subjective_metric, {})
+                scores.setdefault(subjective_metric, {})
                 metrics[subjective_metric][test_dataset_name] = eval_metrics
                 scores[subjective_metric][test_dataset_name] = {
                     "y_list": eval_result["y_list"],
@@ -493,15 +491,17 @@ class TTAEval:
         if save_qualitative:
             os.makedirs(self.model_dir, exist_ok=True)
             # Convert numpy arrays to lists for JSON serialization
-            scores_serializable = {}
-            for metric_name, datasets in scores.items():
-                scores_serializable[metric_name] = {}
-                for dataset_name, data in datasets.items():
-                    scores_serializable[metric_name][dataset_name] = {
+            scores_serializable = {
+                metric_name: {
+                    dataset_name: {
                         "y_list": [float(y) for y in data["y_list"]],
                         "y_hat_list": [float(y) for y in data["y_hat_list"]],
                         "audio_file_paths": data["audio_file_paths"],
                     }
+                    for dataset_name, data in datasets.items()
+                }
+                for metric_name, datasets in scores.items()
+            }
             qualitative_data = {
                 "metrics": metrics,
                 "meta_data": self.meta_data,
