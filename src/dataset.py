@@ -60,6 +60,7 @@ class TTADataset(Dataset):
         dtype: torch.dtype = torch.float32,
         pre_load_features: bool = False,
         parsed_seq_size: int = 20,
+        clap_variant: str = "humanclap",
     ):
         """Initialize TTADataset with specified data directory and split."""
         self.data_dir = data_dir
@@ -70,6 +71,7 @@ class TTADataset(Dataset):
         self.pre_load_features = pre_load_features
         self.parsed_seq_size = parsed_seq_size
         self.subjective_metrics = subjective_metrics
+        self.clap_variant = clap_variant
         self.database = []
         for subjective_metric in subjective_metrics:
             if "relate" in dataset_names:
@@ -88,13 +90,6 @@ class TTADataset(Dataset):
                 self._load_clotho_data(split, subjective_metric)
             if "compa" in dataset_names:
                 self._load_compa_data(split, subjective_metric)
-
-        if pre_load_features:
-            for i in tqdm(
-                range(len(self.database)),
-                desc="Pre-loading pre-extracted features into memory",
-            ):
-                self.database[i] = self._load_features(self.database[i])
 
     def _load_relate_data(self, split: str, subjective_metric: str) -> None:
         """Load RELATE dataset and split into train, val, test sets."""
@@ -616,9 +611,6 @@ class TTADataset(Dataset):
             wav = torch.nn.functional.pad(wav, (0, self.max_len - wav.shape[0]))
         return wav.to(self.dtype)
 
-    def __len__(self):
-        return len(self.database)
-
     def _load_pre_extracted_feats(
         self, feats_name: str, dataset_name: str, file_name: str, dim: int = None
     ) -> torch.Tensor:
@@ -640,9 +632,93 @@ class TTADataset(Dataset):
             return torch.empty(0, dtype=torch.bool)
         return torch.load(feat_path, map_location="cpu")
 
+    def _load_compa_feats(self, data):
+        """Load CompA choice features for multiple choice tasks."""
+        dataset_name = "compa"
+        rev_audio = data["rev_audio"]
+        rev_audio_file_name = os.path.basename(rev_audio).replace(".wav", ".pt")
+        # Rev Audio embed.
+        data[f"{self.clap_variant}_audio_rev"] = self._load_pre_extracted_feats(
+            feats_name=f"{self.clap_variant}_audio",
+            dataset_name=dataset_name,
+            file_name=rev_audio_file_name,
+        )
+        # Rev Text embed.
+        data[f"{self.clap_variant}_text_rev"] = self._load_pre_extracted_feats(
+            feats_name=f"{self.clap_variant}_text",
+            dataset_name=dataset_name,
+            file_name=f"{data['text_id']}_rev.pt",
+        )
+        # Rev Text -> Audio parsed embed.
+        data[f"{self.clap_variant}_parsed_audio_rev"] = self._pad_or_truncate_feats(
+            self._load_pre_extracted_feats(
+                feats_name=f"{self.clap_variant}_parsed_audio",
+                dataset_name=dataset_name,
+                file_name=f"{data['text_id']}_rev.pt",
+            )
+        )
+        data[f"{self.clap_variant}_parsed_text_rev"] = self._pad_or_truncate_feats(
+            self._load_pre_extracted_feats(
+                feats_name=f"{self.clap_variant}_parsed_text",
+                dataset_name=dataset_name,
+                file_name=f"{data['text_id']}_rev.pt",
+            )
+        )
+        data[f"{self.clap_variant}_parsed_mask_rev"] = self._pad_or_truncate_mask(
+            self._load_pre_extracted_mask(
+                feats_name=f"{self.clap_variant}_parsed_mask",
+                dataset_name=dataset_name,
+                file_name=f"{data['text_id']}_rev.pt",
+            )
+        )
+        # Text -> Rev Audio parsed embed.
+        data[f"rev_{self.clap_variant}_parsed_audio"] = self._pad_or_truncate_feats(
+            self._load_pre_extracted_feats(
+                feats_name=f"{self.clap_variant}_parsed_audio",
+                dataset_name=dataset_name,
+                file_name=f"rev_{data['text_id']}.pt",
+            )
+        )
+        data[f"rev_{self.clap_variant}_parsed_text"] = self._pad_or_truncate_feats(
+            self._load_pre_extracted_feats(
+                feats_name=f"{self.clap_variant}_parsed_text",
+                dataset_name=dataset_name,
+                file_name=f"rev_{data['text_id']}.pt",
+            )
+        )
+        data[f"rev_{self.clap_variant}_parsed_mask"] = self._pad_or_truncate_mask(
+            self._load_pre_extracted_mask(
+                feats_name=f"{self.clap_variant}_parsed_mask",
+                dataset_name=dataset_name,
+                file_name=f"rev_{data['text_id']}.pt",
+            )
+        )
+        # Rev Text -> Rev Audio parsed embed.
+        data[f"rev_{self.clap_variant}_parsed_audio_rev"] = self._pad_or_truncate_feats(
+            self._load_pre_extracted_feats(
+                feats_name=f"{self.clap_variant}_parsed_audio",
+                dataset_name=dataset_name,
+                file_name=f"rev_{data['text_id']}_rev.pt",
+            )
+        )
+        data[f"rev_{self.clap_variant}_parsed_text_rev"] = self._pad_or_truncate_feats(
+            self._load_pre_extracted_feats(
+                feats_name=f"{self.clap_variant}_parsed_text",
+                dataset_name=dataset_name,
+                file_name=f"rev_{data['text_id']}_rev.pt",
+            )
+        )
+        data[f"rev_{self.clap_variant}_parsed_mask_rev"] = self._pad_or_truncate_mask(
+            self._load_pre_extracted_mask(
+                feats_name=f"{self.clap_variant}_parsed_mask",
+                dataset_name=dataset_name,
+                file_name=f"rev_{data['text_id']}_rev.pt",
+            )
+        )
+        return data
+
     def _load_features(self, data):
         """Pre-load all features into memory to speed up data loading."""
-        clap_variant = "humanclap"
         laionclap_dim = 512
         text_file_name = f"{data['text_id']}.pt"
         audio_file_name = os.path.basename(data["audio_file_path"]).replace(
@@ -650,35 +726,38 @@ class TTADataset(Dataset):
         )
         dataset_name = data["dataset"]
 
-        data[f"{clap_variant}_audio"] = self._load_pre_extracted_feats(
-            feats_name=f"{clap_variant}_audio",
+        # Base features
+        data[f"{self.clap_variant}_audio"] = self._load_pre_extracted_feats(
+            feats_name=f"{self.clap_variant}_audio",
             dataset_name=dataset_name,
             file_name=audio_file_name,
         )
-        data[f"{clap_variant}_text"] = self._load_pre_extracted_feats(
-            feats_name=f"{clap_variant}_text",
+        data[f"{self.clap_variant}_text"] = self._load_pre_extracted_feats(
+            feats_name=f"{self.clap_variant}_text",
             dataset_name=dataset_name,
             file_name=text_file_name,
         )
-        data[f"{clap_variant}_parsed_audio"] = self._pad_or_truncate_feats(
+
+        # Parsed features
+        data[f"{self.clap_variant}_parsed_audio"] = self._pad_or_truncate_feats(
             self._load_pre_extracted_feats(
-                feats_name=f"{clap_variant}_parsed_audio",
+                feats_name=f"{self.clap_variant}_parsed_audio",
                 dataset_name=dataset_name,
                 file_name=text_file_name,
                 dim=laionclap_dim,
             )
         )
-        data[f"{clap_variant}_parsed_text"] = self._pad_or_truncate_feats(
+        data[f"{self.clap_variant}_parsed_text"] = self._pad_or_truncate_feats(
             self._load_pre_extracted_feats(
-                feats_name=f"{clap_variant}_parsed_text",
+                feats_name=f"{self.clap_variant}_parsed_text",
                 dataset_name=dataset_name,
                 file_name=text_file_name,
                 dim=laionclap_dim,
             )
         )
-        data[f"{clap_variant}_parsed_mask"] = self._pad_or_truncate_mask(
+        data[f"{self.clap_variant}_parsed_mask"] = self._pad_or_truncate_mask(
             self._load_pre_extracted_mask(
-                feats_name=f"{clap_variant}_parsed_mask",
+                feats_name=f"{self.clap_variant}_parsed_mask",
                 dataset_name=dataset_name,
                 file_name=text_file_name,
             )
@@ -686,86 +765,7 @@ class TTADataset(Dataset):
 
         # Load CompA choice features if this is a CompA dataset
         if dataset_name == "compa":
-            rev_audio = data["rev_audio"]
-            rev_audio_file_name = os.path.basename(rev_audio).replace(".wav", ".pt")
-            # Rev Audio embed.
-            data[f"{clap_variant}_audio_rev"] = self._load_pre_extracted_feats(
-                feats_name=f"{clap_variant}_audio",
-                dataset_name=dataset_name,
-                file_name=rev_audio_file_name,
-            )
-            # Rev Text embed.
-            data[f"{clap_variant}_text_rev"] = self._load_pre_extracted_feats(
-                feats_name=f"{clap_variant}_text",
-                dataset_name=dataset_name,
-                file_name=f"{data['text_id']}_rev.pt",
-            )
-            # Rev Text -> Audio parsed embed.
-            data[f"{clap_variant}_parsed_audio_rev"] = self._pad_or_truncate_feats(
-                self._load_pre_extracted_feats(
-                    feats_name=f"{clap_variant}_parsed_audio",
-                    dataset_name=dataset_name,
-                    file_name=f"{data['text_id']}_rev.pt",
-                )
-            )
-            data[f"{clap_variant}_parsed_text_rev"] = self._pad_or_truncate_feats(
-                self._load_pre_extracted_feats(
-                    feats_name=f"{clap_variant}_parsed_text",
-                    dataset_name=dataset_name,
-                    file_name=f"{data['text_id']}_rev.pt",
-                )
-            )
-            data[f"{clap_variant}_parsed_mask_rev"] = self._pad_or_truncate_mask(
-                self._load_pre_extracted_mask(
-                    feats_name=f"{clap_variant}_parsed_mask",
-                    dataset_name=dataset_name,
-                    file_name=f"{data['text_id']}_rev.pt",
-                )
-            )
-            # Text -> Rev Audio parsed embed.
-            data[f"rev_{clap_variant}_parsed_audio"] = self._pad_or_truncate_feats(
-                self._load_pre_extracted_feats(
-                    feats_name=f"{clap_variant}_parsed_audio",
-                    dataset_name=dataset_name,
-                    file_name=f"rev_{data['text_id']}.pt",
-                )
-            )
-            data[f"rev_{clap_variant}_parsed_text"] = self._pad_or_truncate_feats(
-                self._load_pre_extracted_feats(
-                    feats_name=f"{clap_variant}_parsed_text",
-                    dataset_name=dataset_name,
-                    file_name=f"rev_{data['text_id']}.pt",
-                )
-            )
-            data[f"rev_{clap_variant}_parsed_mask"] = self._pad_or_truncate_mask(
-                self._load_pre_extracted_mask(
-                    feats_name=f"{clap_variant}_parsed_mask",
-                    dataset_name=dataset_name,
-                    file_name=f"rev_{data['text_id']}.pt",
-                )
-            )
-            # Rev Text -> Rev Audio parsed embed.
-            data[f"rev_{clap_variant}_parsed_audio_rev"] = self._pad_or_truncate_feats(
-                self._load_pre_extracted_feats(
-                    feats_name=f"{clap_variant}_parsed_audio",
-                    dataset_name=dataset_name,
-                    file_name=f"rev_{data['text_id']}_rev.pt",
-                )
-            )
-            data[f"rev_{clap_variant}_parsed_text_rev"] = self._pad_or_truncate_feats(
-                self._load_pre_extracted_feats(
-                    feats_name=f"{clap_variant}_parsed_text",
-                    dataset_name=dataset_name,
-                    file_name=f"rev_{data['text_id']}_rev.pt",
-                )
-            )
-            data[f"rev_{clap_variant}_parsed_mask_rev"] = self._pad_or_truncate_mask(
-                self._load_pre_extracted_mask(
-                    feats_name=f"{clap_variant}_parsed_mask",
-                    dataset_name=dataset_name,
-                    file_name=f"rev_{data['text_id']}_rev.pt",
-                )
-            )
+            data = self._load_compa_feats(data)
 
         return data
 
@@ -798,6 +798,9 @@ class TTADataset(Dataset):
         pad_size = target_len - cur_len
         pad = torch.zeros(pad_size, dtype=mask.dtype, device=mask.device)
         return torch.cat([mask, pad], dim=0)
+
+    def __len__(self):
+        return len(self.database)
 
     def __getitem__(self, idx):
         """Get item by index from the dataset."""

@@ -1572,7 +1572,7 @@ def embed_quality_prompts(feats_dir: str, embedder: CLAPEmbedder):
         "unrelated": "silence with no sound events",
     }
 
-    save_dir = os.path.join(feats_dir, "quality_prompts")
+    save_dir = os.path.join(feats_dir, f"{embedder.name}_quality_prompts")
     os.makedirs(save_dir, exist_ok=True)
 
     # Embed quality prompts (high/low)
