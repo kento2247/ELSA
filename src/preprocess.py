@@ -616,7 +616,7 @@ def pam_extract(feats_dir: str):
 
 def main(args):
     dataset = TTAPreprocessDataset(data_dir=args.data_dir, split=args.split)
-    dataloader = DataLoader(dataset, batch_size=args.bs, shuffle=False)
+    # dataloader = DataLoader(dataset, batch_size=args.bs, shuffle=False)
 
     pam_extract(args.feats_dir)
 
