@@ -1684,7 +1684,8 @@ def arg_parser():
     parser = argparse.ArgumentParser(description="Audio Captioning Preprocessing")
     parser.add_argument(
         "--elsa",
-        action="store_true",
+        type=bool,
+        default=True,
         help="Enable ELSA-style preprocessing (text parsing and audio separation)",
     )
     parser.add_argument(

@@ -28,8 +28,8 @@ class TTAEval:
         data_dir: str,
         model_dir: str,
         features_dir: str,
-        # training params
         batch_size: int,
+        # training params
         lr: float,
         epochs: int,
         eval_freq: int,
@@ -47,10 +47,10 @@ class TTAEval:
         self.features_dir = features_dir
         self.model_dir = model_dir
         self.batch_size = batch_size
-        self.lr = lr
-        self.epochs = epochs
-        self.eval_freq = eval_freq
-        self.main_metric = main_metric
+        # self.lr = lr
+        # self.epochs = epochs
+        # self.eval_freq = eval_freq
+        # self.main_metric = main_metric
         self.subjective_metrics = subjective_metrics
         self.test_dataset_names = test_dataset_names
         self.parse_event_count = parse_event_count
@@ -59,8 +59,6 @@ class TTAEval:
         self.clap_variant = clap_variant
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = TTAEvalModel().to(self.device)
-
-        self._load_quality_prompts()
 
         self.meta_data = {
             "timestamp": time.strftime("%Y%m%d-%H%M%S"),
@@ -79,132 +77,107 @@ class TTAEval:
             return value.to(self.device)
         return None
 
-    def _load_quality_prompts(self):
-        feats_dir = os.path.join(self.data_dir, "features", "quality_prompts")
-        high_path = os.path.join(feats_dir, "high.pt")
-        low_path = os.path.join(feats_dir, "low.pt")
-        unrelated_path = os.path.join(feats_dir, "unrelated.pt")
-
-        if os.path.exists(high_path) and os.path.exists(low_path):
-            high_emb = torch.load(high_path, map_location=self.device)
-            low_emb = torch.load(low_path, map_location=self.device)
-
-            unrelated_emb = None
-            if os.path.exists(unrelated_path):
-                unrelated_emb = torch.load(unrelated_path, map_location=self.device)
-                print(f"Loaded quality + contrast prompts from {feats_dir}")
-            else:
-                print(f"Loaded quality prompts from {feats_dir} (no contrast prompt)")
-
-            self.model.load_quality_prompts(high_emb, low_emb, unrelated_emb)
-        else:
-            print(
-                f"Quality prompts not found at {feats_dir}. "
-                "Run 'uv run src/preprocess.py --quality_prompts' to generate them. "
-                "REL and OVL will produce identical predictions until quality prompts are loaded."
-            )
-
     def train(self):
         """Train the model with periodic evaluation on val and test sets."""
-        train_dataset = TTADataset(data_dir=self.data_dir, split="train")
-        val_dataset = TTADataset(data_dir=self.data_dir, split="val")
-        train_loader = DataLoader(
-            train_dataset,
-            batch_size=self.batch_size,
-            shuffle=True,
-            num_workers=4,
-        )
-        val_loader = DataLoader(
-            val_dataset,
-            batch_size=self.batch_size,
-            shuffle=False,
-            num_workers=4,
-        )
-        del train_dataset, val_dataset
+        # train_dataset = TTADataset(data_dir=self.data_dir, split="train")
+        # val_dataset = TTADataset(data_dir=self.data_dir, split="val")
+        # train_loader = DataLoader(
+        #     train_dataset,
+        #     batch_size=self.batch_size,
+        #     shuffle=True,
+        #     num_workers=4,
+        # )
+        # val_loader = DataLoader(
+        #     val_dataset,
+        #     batch_size=self.batch_size,
+        #     shuffle=False,
+        #     num_workers=4,
+        # )
+        # del train_dataset, val_dataset
 
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
-        self.criterion = torch.nn.MSELoss()
+        # self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
+        # self.criterion = torch.nn.MSELoss()
 
-        best_epoch = -1
-        best_val_metric = float("-inf")
-        best_test_metrics = None
+        # best_epoch = -1
+        # best_val_metric = float("-inf")
+        # best_test_metrics = None
 
-        for epoch in range(1, self.epochs + 1):
-            train_loss = self._train_epoch(epoch, train_loader)
-            print(f"Epoch {epoch}/{self.epochs} - Train Loss: {train_loss:.4f}")
+        # for epoch in range(1, self.epochs + 1):
+        #     train_loss = self._train_epoch(epoch, train_loader)
+        #     print(f"Epoch {epoch}/{self.epochs} - Train Loss: {train_loss:.4f}")
 
-            if self.log_wandb:
-                wandb.log({"epoch": epoch, "train_loss": train_loss})
+        #     if self.log_wandb:
+        #         wandb.log({"epoch": epoch, "train_loss": train_loss})
 
-            if (epoch - 1) % self.eval_freq == 0:
-                val_metrics = self.evaluate(val_loader, desc="Validation")["metrics"]
-                val_metric = val_metrics[self.main_metric]
-                is_best_epoch = val_metric > best_val_metric
+        #     if (epoch - 1) % self.eval_freq == 0:
+        #         val_metrics = self.evaluate(val_loader, desc="Validation")["metrics"]
+        #         val_metric = val_metrics[self.main_metric]
+        #         is_best_epoch = val_metric > best_val_metric
 
-                print(
-                    f"Epoch {epoch}/{self.epochs} - Val Metrics: {val_metrics}, Best: {is_best_epoch}"
-                )
+        #         print(
+        #             f"Epoch {epoch}/{self.epochs} - Val Metrics: {val_metrics}, Best: {is_best_epoch}"
+        #         )
 
-                if self.log_wandb:
-                    wandb.log({"epoch": epoch, "val": val_metrics})
+        #         if self.log_wandb:
+        #             wandb.log({"epoch": epoch, "val": val_metrics})
 
-                print(f"Running test at epoch {epoch}...")
-                test_metrics = self.test(
-                    save_qualitative=self.save_qualitative and is_best_epoch
-                )
+        #         print(f"Running test at epoch {epoch}...")
+        #         test_metrics = self.test(
+        #             save_qualitative=self.save_qualitative and is_best_epoch
+        #         )
 
-                if is_best_epoch:
-                    best_val_metric = val_metric
-                    best_epoch = epoch
-                    self.save_model("best_model.pt")
-                    best_test_metrics = test_metrics
+        #         if is_best_epoch:
+        #             best_val_metric = val_metric
+        #             best_epoch = epoch
+        #             self.save_model("best_model.pt")
+        #             best_test_metrics = test_metrics
 
-        print(f"Training completed. Best epoch: {best_epoch}")
-        self.meta_data["best_epoch"] = best_epoch
-        lb_text = format_leaderboard_text(self.meta_data, best_test_metrics)
-        print(f"Best Leaderboard Text:\n{lb_text}")
-        return best_test_metrics
+        # print(f"Training completed. Best epoch: {best_epoch}")
+        # self.meta_data["best_epoch"] = best_epoch
+        # lb_text = format_leaderboard_text(self.meta_data, best_test_metrics)
+        # print(f"Best Leaderboard Text:\n{lb_text}")
+        # return best_test_metrics
 
     def _train_epoch(self, epoch: int, train_loader: DataLoader) -> float:
         """Train for one epoch and return average loss."""
-        self.model.train()
-        total_loss = 0.0
-        num_batches = 0
+        # self.model.train()
+        # total_loss = 0.0
+        # num_batches = 0
 
-        for batch in tqdm(train_loader, desc=f"Training Epoch {epoch}"):
-            clap_audio = batch[f"{self.clap_variant}_audio"].to(self.device)
-            clap_text = batch[f"{self.clap_variant}_text"].to(self.device)
-            clap_parsed_audio = self._maybe_to_device(
-                batch.get(f"{self.clap_variant}_parsed_audio")
-            )
-            clap_parsed_text = self._maybe_to_device(
-                batch.get(f"{self.clap_variant}_parsed_text")
-            )
-            parsed_mask = self._maybe_to_device(
-                batch.get(f"{self.clap_variant}_parsed_mask")
-            )
-            metric_id = batch.get("subjective_metric_id")
-            if metric_id is not None:
-                metric_id = metric_id.to(self.device)
-            scores = batch["score"].float().to(self.device)
+        # for batch in tqdm(train_loader, desc=f"Training Epoch {epoch}"):
+        #     clap_audio = batch[f"{self.clap_variant}_audio"].to(self.device)
+        #     clap_text = batch[f"{self.clap_variant}_text"].to(self.device)
+        #     clap_parsed_audio = self._maybe_to_device(
+        #         batch.get(f"{self.clap_variant}_parsed_audio")
+        #     )
+        #     clap_parsed_text = self._maybe_to_device(
+        #         batch.get(f"{self.clap_variant}_parsed_text")
+        #     )
+        #     parsed_mask = self._maybe_to_device(
+        #         batch.get(f"{self.clap_variant}_parsed_mask")
+        #     )
+        #     metric_id = batch.get("subjective_metric_id")
+        #     if metric_id is not None:
+        #         metric_id = metric_id.to(self.device)
+        #     scores = batch["score"].float().to(self.device)
 
-            self.optimizer.zero_grad()
-            preds = self.model(
-                clap_audio,
-                clap_text,
-                clap_parsed_audio,
-                clap_parsed_text,
-                parsed_mask,
-                metric_id,
-            ).squeeze(-1)
-            loss = self.criterion(preds, scores)
-            loss.backward()
-            self.optimizer.step()
+        #     self.optimizer.zero_grad()
+        #     preds = self.model(
+        #         clap_audio,
+        #         clap_text,
+        #         clap_parsed_audio,
+        #         clap_parsed_text,
+        #         parsed_mask,
+        #         metric_id,
+        #     ).squeeze(-1)
+        #     loss = self.criterion(preds, scores)
+        #     loss.backward()
+        #     self.optimizer.step()
 
-            total_loss += loss.item()
-            num_batches += 1
+        #     total_loss += loss.item()
+        #     num_batches += 1
 
-        return total_loss / num_batches
+        # return total_loss / num_batches
 
     def evaluate(self, data_loader: DataLoader, desc: str = "Evaluating") -> dict:
         """Evaluate the model and return metrics dict."""
@@ -596,19 +569,19 @@ def parse_args():
         help="Directory to save/load the model",
     )
     # training params
-    parser.add_argument("--batch_size", type=int, default=1, help="Batch size")
-    parser.add_argument("--lr", type=float, default=1e-5, help="Learning rate")
-    parser.add_argument("--epochs", type=int, default=30, help="Number of epochs")
-    parser.add_argument(
-        "--eval_freq", type=int, default=3, help="Evaluation frequency (in epochs)"
-    )
-    parser.add_argument(
-        "--main_metric",
-        type=str,
-        default="kendall_tau",
-        choices=["mse", "pearson", "spearman", "kendall_tau"],
-        help="Main metric for model selection",
-    )
+    # parser.add_argument("--batch_size", type=int, default=1, help="Batch size")
+    # parser.add_argument("--lr", type=float, default=1e-5, help="Learning rate")
+    # parser.add_argument("--epochs", type=int, default=30, help="Number of epochs")
+    # parser.add_argument(
+    #     "--eval_freq", type=int, default=3, help="Evaluation frequency (in epochs)"
+    # )
+    # parser.add_argument(
+    #     "--main_metric",
+    #     type=str,
+    #     default="kendall_tau",
+    #     choices=["mse", "pearson", "spearman", "kendall_tau"],
+    #     help="Main metric for model selection",
+    # )
     # evaluation params
     parser.add_argument(
         "--subjective_metrics",
