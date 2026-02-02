@@ -193,10 +193,10 @@ class TTAEval:
         with torch.no_grad():
             for batch in tqdm(data_loader, desc=desc):
                 parsed_mask = batch[f"{self.clap_variant}_parsed_mask"]
-                scores = batch["score"].numpy()
+                scores = np.atleast_1d(batch["score"].numpy())
                 audio_file_path = batch["audio_file_path"]
 
-                preds = (
+                preds = np.atleast_1d(
                     self.model(
                         audio_feats=batch[f"{self.clap_variant}_audio"],
                         text_feats=batch[f"{self.clap_variant}_text"],
