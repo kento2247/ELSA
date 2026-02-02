@@ -1448,7 +1448,9 @@ def create_diff_audio(dataloader, feats_dir: str):
             # Use gather to get the actual waveform values with maximum absolute value at each time step
             merged_separated = torch.gather(
                 separated_audios, 0, max_abs_idx.unsqueeze(0)
-            ).squeeze(0)  # (C, T)
+            ).squeeze(
+                0
+            )  # (C, T)
 
             diff_audio = original_audio - merged_separated
             diff_audio = torch.clamp(diff_audio, -1.0, 1.0)
@@ -1613,7 +1615,7 @@ def arg_parser():
     parser.add_argument(
         "--clap_model",
         type=str,
-        default="laionclap",
+        default="humanclap",
         help="CLAP model to use (humanclap/laionclap/msclap)",
     )
     parser.add_argument(

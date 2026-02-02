@@ -386,7 +386,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Audio Captioning Evaluation")
     # mode
     parser.add_argument(
-        "--mode",
+        "mode",
         type=str,
         default="test",
         choices=["train", "test"],

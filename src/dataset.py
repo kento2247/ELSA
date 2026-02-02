@@ -24,7 +24,16 @@ class TTADataset(Dataset):
                 "OrderText",
                 "OrderAudio",
             ]
-        ] = ["REL", "OVL"],
+        ] = [
+            "REL",
+            "OVL",
+            "IS",
+            "OS",
+            "AttributeText",
+            "AttributeAudio",
+            "OrderText",
+            "OrderAudio",
+        ],
         dataset_names: list[
             Literal[
                 "relate",
