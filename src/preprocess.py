@@ -18,13 +18,13 @@ from pydantic import BaseModel, Field
 from sam_audio import SAMAudio, SAMAudioProcessor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from transformers import AutoModelForCausalLM, AutoTokenizer, ClapModel, ClapProcessor
+from transformers import (AutoModelForCausalLM, AutoTokenizer, ClapModel,
+                          ClapProcessor)
 
 # from AudioSep.models.audiosep import AudioSep as AudioSepModel #TODO fix
 # from AudioSep.utils import get_ss_model #TODO fix
 # from CLAPSep.model.CLAPSep import CLAPSep #TODO fix
 from dataset import TTADataset
-
 # from SoloAudio.solo_audio_ins import SoloAudio #TODO fix
 from utils.helper_func import fix_seed
 
@@ -1621,55 +1621,53 @@ def main(args):
     # If only embedding quality prompts, do that and exit
     if args.elsa:
         embed_quality_prompts(args.feats_dir, embedder)
-        return
-
-    for split in args.splits:
-        dataset = TTAPreprocessDataset(
-            data_dir=args.data_dir,
-            split=split,
-            subjective_metrics=args.subjective_metrics,
-            dataset_names=args.dataset_names,
-        )
-        dataloader = DataLoader(dataset, batch_size=args.bs, shuffle=False)
-
-        clap_extract(dataloader, args.feats_dir, embedder=embedder)
-        clear_gpu_memory()
-
-        if args.elsa:
-            if text_parser_model == "gemini":
-                text_parser = GeminiTextParser()
-            elif text_parser_model == "gpt":
-                text_parser = GPTTextParser()
-            elif text_parser_model == "qwen":
-                text_parser = QwenTextParser()
-
-            text_parse(dataloader, args.feats_dir, text_parser=text_parser)
-            del text_parser
-            clear_gpu_memory()
-
-            if audio_separator_model == "sam_audio":
-                audio_separator = SAMAudioSeparator()
-            # elif audio_separator_model == "clapsep":
-            #     audio_separator = CLAPSepSeparator()
-            # elif audio_separator_model == "soloaudio":
-            #     audio_separator = SoloAudioSeparator()
-            # elif audio_separator_model == "audiosep":
-            #     audio_separator = AudioSepSeparator()
-
-            audio_separate(
-                dataloader, args.feats_dir, audio_separator, text_parser_model
+        for split in args.splits:
+            dataset = TTAPreprocessDataset(
+                data_dir=args.data_dir,
+                split=split,
+                subjective_metrics=args.subjective_metrics,
+                dataset_names=args.dataset_names,
             )
-            del audio_separator
+            dataloader = DataLoader(dataset, batch_size=args.bs, shuffle=False)
+
+            clap_extract(dataloader, args.feats_dir, embedder=embedder)
             clear_gpu_memory()
 
-            embed_parsed_data(
-                dataloader,
-                args.feats_dir,
-                embedder,
-                text_parser_model=text_parser_model,
-                audio_separator_model=audio_separator_model,
-            )
-            clear_gpu_memory()
+            if args.elsa:
+                if text_parser_model == "gemini":
+                    text_parser = GeminiTextParser()
+                elif text_parser_model == "gpt":
+                    text_parser = GPTTextParser()
+                elif text_parser_model == "qwen":
+                    text_parser = QwenTextParser()
+
+                text_parse(dataloader, args.feats_dir, text_parser=text_parser)
+                del text_parser
+                clear_gpu_memory()
+
+                if audio_separator_model == "sam_audio":
+                    audio_separator = SAMAudioSeparator()
+                # elif audio_separator_model == "clapsep":
+                #     audio_separator = CLAPSepSeparator()
+                # elif audio_separator_model == "soloaudio":
+                #     audio_separator = SoloAudioSeparator()
+                # elif audio_separator_model == "audiosep":
+                #     audio_separator = AudioSepSeparator()
+
+                audio_separate(
+                    dataloader, args.feats_dir, audio_separator, text_parser_model
+                )
+                del audio_separator
+                clear_gpu_memory()
+
+                embed_parsed_data(
+                    dataloader,
+                    args.feats_dir,
+                    embedder,
+                    text_parser_model=text_parser_model,
+                    audio_separator_model=audio_separator_model,
+                )
+                clear_gpu_memory()
 
 
 ### argument parser ###

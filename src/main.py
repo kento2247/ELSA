@@ -57,7 +57,9 @@ class TTAEval:
         self.log_wandb = log_wandb
         self.save_qualitative = save_qualitative
         self.clap_variant = clap_variant
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        self.device_name = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = torch.device(self.device_name)
         self.model = TTAEvalModel().to(self.device)
 
         self.meta_data = {
@@ -72,15 +74,14 @@ class TTAEval:
             wandb.init(project="TTAEval")
             self.meta_data["wandb_url"] = wandb.run.url
 
-    def _maybe_to_device(self, value):
-        if isinstance(value, torch.Tensor):
-            return value.to(self.device)
-        return None
-
     def train(self):
         """Train the model with periodic evaluation on val and test sets."""
-        # train_dataset = TTADataset(data_dir=self.data_dir, split="train")
-        # val_dataset = TTADataset(data_dir=self.data_dir, split="val")
+        # train_dataset = TTADataset(
+        #     data_dir=self.data_dir, split="train", device=self.device_name
+        # )
+        # val_dataset = TTADataset(
+        #     data_dir=self.data_dir, split="val", device=self.device_name
+        # )
         # train_loader = DataLoader(
         #     train_dataset,
         #     batch_size=self.batch_size,
@@ -145,8 +146,8 @@ class TTAEval:
         # num_batches = 0
 
         # for batch in tqdm(train_loader, desc=f"Training Epoch {epoch}"):
-        #     clap_audio = batch[f"{self.clap_variant}_audio"].to(self.device)
-        #     clap_text = batch[f"{self.clap_variant}_text"].to(self.device)
+        #     clap_audio = batch[f"{self.clap_variant}_audio"]
+        #     clap_text = batch[f"{self.clap_variant}_text"]
         #     clap_parsed_audio = self._maybe_to_device(
         #         batch.get(f"{self.clap_variant}_parsed_audio")
         #     )
@@ -156,10 +157,8 @@ class TTAEval:
         #     parsed_mask = self._maybe_to_device(
         #         batch.get(f"{self.clap_variant}_parsed_mask")
         #     )
-        #     metric_id = batch.get("subjective_metric_id")
-        #     if metric_id is not None:
-        #         metric_id = metric_id.to(self.device)
-        #     scores = batch["score"].float().to(self.device)
+        #     metric_id = batch["subjective_metric_id"]
+        #     scores = batch["score"].float()
 
         #     self.optimizer.zero_grad()
         #     preds = self.model(
@@ -193,31 +192,18 @@ class TTAEval:
 
         with torch.no_grad():
             for batch in tqdm(data_loader, desc=desc):
-                clap_audio = batch[f"{self.clap_variant}_audio"].to(self.device)
-                clap_text = batch[f"{self.clap_variant}_text"].to(self.device)
-                clap_parsed_audio = self._maybe_to_device(
-                    batch.get(f"{self.clap_variant}_parsed_audio")
-                )
-                clap_parsed_text = self._maybe_to_device(
-                    batch.get(f"{self.clap_variant}_parsed_text")
-                )
-                parsed_mask = self._maybe_to_device(
-                    batch.get(f"{self.clap_variant}_parsed_mask")
-                )
-                metric_id = batch.get("subjective_metric_id")
-                if metric_id is not None:
-                    metric_id = metric_id.to(self.device)
+                parsed_mask = batch[f"{self.clap_variant}_parsed_mask"]
                 scores = batch["score"].numpy()
                 audio_file_path = batch["audio_file_path"]
 
                 preds = (
                     self.model(
-                        clap_audio,
-                        clap_text,
-                        clap_parsed_audio,
-                        clap_parsed_text,
-                        parsed_mask,
-                        metric_id,
+                        audio_feats=batch[f"{self.clap_variant}_audio"],
+                        text_feats=batch[f"{self.clap_variant}_text"],
+                        parsed_audio_feats=batch[f"{self.clap_variant}_parsed_audio"],
+                        parsed_text_feats=batch[f"{self.clap_variant}_parsed_text"],
+                        parsed_mask=batch[f"{self.clap_variant}_parsed_mask"],
+                        metric_id=batch["subjective_metric_id"],
                     )
                     .squeeze(-1)
                     .cpu()
@@ -569,19 +555,19 @@ def parse_args():
         help="Directory to save/load the model",
     )
     # training params
-    # parser.add_argument("--batch_size", type=int, default=1, help="Batch size")
-    # parser.add_argument("--lr", type=float, default=1e-5, help="Learning rate")
-    # parser.add_argument("--epochs", type=int, default=30, help="Number of epochs")
-    # parser.add_argument(
-    #     "--eval_freq", type=int, default=3, help="Evaluation frequency (in epochs)"
-    # )
-    # parser.add_argument(
-    #     "--main_metric",
-    #     type=str,
-    #     default="kendall_tau",
-    #     choices=["mse", "pearson", "spearman", "kendall_tau"],
-    #     help="Main metric for model selection",
-    # )
+    parser.add_argument("--batch_size", type=int, default=1, help="Batch size")
+    parser.add_argument("--lr", type=float, default=1e-5, help="Learning rate")
+    parser.add_argument("--epochs", type=int, default=30, help="Number of epochs")
+    parser.add_argument(
+        "--eval_freq", type=int, default=3, help="Evaluation frequency (in epochs)"
+    )
+    parser.add_argument(
+        "--main_metric",
+        type=str,
+        default="kendall_tau",
+        choices=["mse", "pearson", "spearman", "kendall_tau"],
+        help="Main metric for model selection",
+    )
     # evaluation params
     parser.add_argument(
         "--subjective_metrics",

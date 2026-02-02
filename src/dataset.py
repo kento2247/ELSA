@@ -61,6 +61,7 @@ class TTADataset(Dataset):
         pre_load_features: bool = False,
         parsed_seq_size: int = 20,
         clap_variant: str = "humanclap",
+        device: str = "cpu",
     ):
         """Initialize TTADataset with specified data directory and split."""
         self.data_dir = data_dir
@@ -72,6 +73,7 @@ class TTADataset(Dataset):
         self.parsed_seq_size = parsed_seq_size
         self.subjective_metrics = subjective_metrics
         self.clap_variant = clap_variant
+        self.device = device
         self.database = []
 
         # Load datasets
@@ -624,7 +626,7 @@ class TTADataset(Dataset):
         feat_path = os.path.join(feats_dir, dataset_name, file_name)
         if not os.path.exists(feat_path):
             return torch.empty(0, dim)
-        feats = torch.load(feat_path, map_location="cpu")
+        feats = torch.load(feat_path, map_location=self.device)
         return feats.to(self.dtype)
 
     def _load_pre_extracted_mask(
@@ -635,7 +637,7 @@ class TTADataset(Dataset):
         feat_path = os.path.join(feats_dir, dataset_name, file_name)
         if not os.path.exists(feat_path):
             return torch.empty(0, dtype=torch.bool)
-        return torch.load(feat_path, map_location="cpu")
+        return torch.load(feat_path, map_location=self.device)
 
     def _load_quality_prompts(self):
         feats_dir = os.path.join(
