@@ -72,90 +72,6 @@ class TTAEval:
             wandb.init(project="TTAEval")
             self.meta_data["wandb_url"] = wandb.run.url
 
-    def train(self):
-        """Train the model with periodic evaluation on val and test sets."""
-        train_dataset = TTADataset(data_dir=self.data_dir, split="train")
-        val_dataset = TTADataset(data_dir=self.data_dir, split="val")
-        train_loader = DataLoader(
-            train_dataset,
-            batch_size=self.batch_size,
-            shuffle=True,
-            num_workers=4,
-        )
-        val_loader = DataLoader(
-            val_dataset,
-            batch_size=self.batch_size,
-            shuffle=False,
-            num_workers=4,
-        )
-        del train_dataset, val_dataset
-
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
-        self.criterion = torch.nn.MSELoss()
-
-        best_epoch = -1
-        best_val_metric = float("-inf")
-        best_test_metrics = None
-
-        for epoch in range(1, self.epochs + 1):
-            train_loss = self._train_epoch(epoch, train_loader)
-            print(f"Epoch {epoch}/{self.epochs} - Train Loss: {train_loss:.4f}")
-
-            if self.log_wandb:
-                wandb.log({"epoch": epoch, "train_loss": train_loss})
-
-            if (epoch - 1) % self.eval_freq == 0:
-                val_metrics = self.evaluate(val_loader, desc="Validation")["metrics"]
-                val_metric = val_metrics[self.main_metric]
-                is_best_epoch = val_metric > best_val_metric
-
-                print(
-                    f"Epoch {epoch}/{self.epochs} - Val Metrics: {val_metrics}, Best: {is_best_epoch}"
-                )
-
-                if self.log_wandb:
-                    wandb.log({"epoch": epoch, "val": val_metrics})
-
-                print(f"Running test at epoch {epoch}...")
-                test_metrics = self.test(
-                    save_qualitative=self.save_qualitative and is_best_epoch
-                )
-
-                if is_best_epoch:
-                    best_val_metric = val_metric
-                    best_epoch = epoch
-                    self.save_model("best_model.pt")
-                    best_test_metrics = test_metrics
-
-        print(f"Training completed. Best epoch: {best_epoch}")
-        self.meta_data["best_epoch"] = best_epoch
-        lb_text = format_leaderboard_text(self.meta_data, best_test_metrics)
-        print(f"Best Leaderboard Text:\n{lb_text}")
-        return best_test_metrics
-
-    def _train_epoch(self, epoch: int, train_loader: DataLoader) -> float:
-        """Train for one epoch and return average loss."""
-        self.model.train()
-        total_loss = 0.0
-        num_batches = 0
-
-        for batch in tqdm(train_loader, desc=f"Training Epoch {epoch}"):
-            msclap_audio = batch["msclap_audio"].to(self.device)
-            msclap_text = batch["msclap_text"].to(self.device)
-            scores = batch["score"].float().to(self.device)
-
-            self.optimizer.zero_grad()
-            preds = self.model(msclap_audio, msclap_text).squeeze(-1)  # [B]
-
-            loss = self.criterion(preds, scores)
-            loss.backward()
-            self.optimizer.step()
-
-            total_loss += loss.item()
-            num_batches += 1
-
-        return total_loss / num_batches
-
     def evaluate(self, data_loader: DataLoader, desc: str = "Evaluating") -> dict:
         """Evaluate the model and return metrics dict."""
         self.model.eval()
@@ -311,7 +227,6 @@ def parse_args():
         type=str,
         nargs="+",
         default=["REL", "OVL"],
-        choices=["REL", "OVL"],
         help="Subjective metric to use from the dataset",
     )
     parser.add_argument(
