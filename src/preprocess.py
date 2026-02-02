@@ -20,11 +20,12 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, ClapModel, ClapProcessor
 
-from AudioSep.models.audiosep import AudioSep as AudioSepModel
-from AudioSep.utils import get_ss_model
-from CLAPSep.model.CLAPSep import CLAPSep
+# from AudioSep.models.audiosep import AudioSep as AudioSepModel #TODO fix
+# from AudioSep.utils import get_ss_model #TODO fix
+# from CLAPSep.model.CLAPSep import CLAPSep #TODO fix
 from dataset import TTADataset
-from SoloAudio.solo_audio_ins import SoloAudio
+
+# from SoloAudio.solo_audio_ins import SoloAudio #TODO fix
 from utils.helper_func import fix_seed
 
 ### laion clap fix ###
@@ -56,14 +57,14 @@ class TTAPreprocessDataset(TTADataset):
     Extends TTADataset to provide raw data items for preprocessing.
     """
 
-    def __init__(self, data_dir: str, split: str = "train"):
+    def __init__(self, **kwargs):
         """Initialize TTAPreprocessDataset.
 
         Args:
             data_dir: Directory containing the dataset.
             split: Dataset split (train/val/test).
         """
-        super().__init__(data_dir=data_dir, split=split)
+        super().__init__(**kwargs)
 
     def __getitem__(self, idx: int) -> dict:
         """Get a data item by index.
@@ -1618,7 +1619,7 @@ def main(args):
         embedder = MSClapEmbedder(seed=args.seed)
 
     # If only embedding quality prompts, do that and exit
-    if args.quality_prompts:
+    if args.elsa:
         embed_quality_prompts(args.feats_dir, embedder)
         return
 
@@ -1634,40 +1635,41 @@ def main(args):
         clap_extract(dataloader, args.feats_dir, embedder=embedder)
         clear_gpu_memory()
 
-        if text_parser_model == "gemini":
-            text_parser = GeminiTextParser()
-        elif text_parser_model == "gpt":
-            text_parser = GPTTextParser()
-        elif text_parser_model == "qwen":
-            text_parser = QwenTextParser()
+        if args.elsa:
+            if text_parser_model == "gemini":
+                text_parser = GeminiTextParser()
+            elif text_parser_model == "gpt":
+                text_parser = GPTTextParser()
+            elif text_parser_model == "qwen":
+                text_parser = QwenTextParser()
 
-        text_parse(dataloader, args.feats_dir, text_parser=text_parser)
-        del text_parser
-        clear_gpu_memory()
+            text_parse(dataloader, args.feats_dir, text_parser=text_parser)
+            del text_parser
+            clear_gpu_memory()
 
-        if audio_separator_model == "sam_audio":
-            audio_separator = SAMAudioSeparator()
-        elif audio_separator_model == "clapsep":
-            audio_separator = CLAPSepSeparator()
-        elif audio_separator_model == "soloaudio":
-            audio_separator = SoloAudioSeparator()
-        elif audio_separator_model == "audiosep":
-            audio_separator = AudioSepSeparator()
+            if audio_separator_model == "sam_audio":
+                audio_separator = SAMAudioSeparator()
+            # elif audio_separator_model == "clapsep":
+            #     audio_separator = CLAPSepSeparator()
+            # elif audio_separator_model == "soloaudio":
+            #     audio_separator = SoloAudioSeparator()
+            # elif audio_separator_model == "audiosep":
+            #     audio_separator = AudioSepSeparator()
 
-        audio_separate(dataloader, args.feats_dir, audio_separator, text_parser_model)
-        del audio_separator
-        clear_gpu_memory()
+            audio_separate(
+                dataloader, args.feats_dir, audio_separator, text_parser_model
+            )
+            del audio_separator
+            clear_gpu_memory()
 
-        embed_parsed_data(
-            dataloader,
-            args.feats_dir,
-            embedder,
-            text_parser_model=text_parser_model,
-            audio_separator_model=audio_separator_model,
-        )
-        clear_gpu_memory()
-
-        create_diff_audio(dataloader, args.feats_dir)
+            embed_parsed_data(
+                dataloader,
+                args.feats_dir,
+                embedder,
+                text_parser_model=text_parser_model,
+                audio_separator_model=audio_separator_model,
+            )
+            clear_gpu_memory()
 
 
 ### argument parser ###
@@ -1680,6 +1682,11 @@ def arg_parser():
         Parsed argument namespace.
     """
     parser = argparse.ArgumentParser(description="Audio Captioning Preprocessing")
+    parser.add_argument(
+        "--elsa",
+        action="store_true",
+        help="Enable ELSA-style preprocessing (text parsing and audio separation)",
+    )
     parser.add_argument(
         "--data_dir",
         type=str,
@@ -1758,11 +1765,6 @@ def arg_parser():
         type=str,
         default="sam_audio",
         help="Audio separator model to use (sam_audio/clapsep/soloaudio/audiosep)",
-    )
-    parser.add_argument(
-        "--quality_prompts",
-        action="store_true",
-        help="Only embed quality prompts (skip other preprocessing)",
     )
     args = parser.parse_args()
     return args
