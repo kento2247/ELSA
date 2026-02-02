@@ -573,15 +573,14 @@ def parse_args():
         "--subjective_metrics",
         type=str,
         nargs="+",
-        # default=["REL", "OVL", "IS", "OS", "AttributeText", "AttributeAudio", "OrderText", "OrderAudio"],
-        default=["AttributeText", "AttributeAudio", "OrderText", "OrderAudio"],
+        default=["REL", "OVL"],
         help="Subjective metric to use from the dataset",
     )
     parser.add_argument(
         "--test_dataset_names",
         type=str,
         nargs="+",
-        default=["relate", "audiocap", "musiccap", "aishell7b", "clotho", "compa"],
+        default=["relate", "audiocap", "musiccap", "clotho"],
         help="List of dataset names to test on",
     )
     parser.add_argument(
