@@ -632,6 +632,6 @@ if __name__ == "__main__":
     if args.mode == "train":
         raise NotImplementedError("Training mode is currently disabled.")
     elif args.mode == "test":
-        test_metrics = evaluator.test()
+        test_metrics = evaluator.test(args.save_qualitative)
         lb_text = format_leaderboard_text(evaluator.meta_data, test_metrics)
         print(f"Leaderboard Text:\n{lb_text}")
