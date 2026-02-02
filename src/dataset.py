@@ -46,12 +46,12 @@ class TTADataset(Dataset):
                 "compa",
             ]
         ] = [
-            # "relate",
-            # "relate_isos",
-            # "audiocap",
-            # "musiccap",
-            # "aishell7b",
-            # "clotho",
+            "relate",
+            "relate_isos",
+            "audiocap",
+            "musiccap",
+            "aishell7b",
+            "clotho",
             "compa",
         ],
         split: Literal["train", "val", "test"] = "train",

@@ -1707,6 +1707,36 @@ def arg_parser():
         help="Dataset splits to process (train/val/test)",
     )
     parser.add_argument(
+        "--subjective_metrics",
+        type=str,
+        nargs="+",
+        default=[
+            "REL",
+            "OVL",
+            "IS",
+            "OS",
+            "AttributeText",
+            "AttributeAudio",
+            "OrderText",
+            "OrderAudio",
+        ],
+    )
+    parser.add_argument(
+        "--dataset_names",
+        type=str,
+        nargs="+",
+        default=[
+            "relate",
+            "relate_isos",
+            "audiocap",
+            "musiccap",
+            "xacle",
+            "aishell7b",
+            "clotho",
+            "compa",
+        ],
+    )
+    parser.add_argument(
         "--clap_model",
         type=str,
         default="humanclap",
