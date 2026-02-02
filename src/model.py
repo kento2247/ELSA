@@ -4,11 +4,7 @@ import torch.nn.functional as F
 
 
 class TTAEvalModel(nn.Module):
-    def __init__(
-        self,
-        embedding_dim: int = 512,
-        dropout: float = 0.1,
-    ):
+    def __init__(self):
         super().__init__()
 
     def forward(

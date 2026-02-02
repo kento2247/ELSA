@@ -1,0 +1,14 @@
+dacvae @ git+https://github.com/facebookresearch/dacvae.git
+audiobox_aesthetics
+einops
+imagebind @ git+https://github.com/facebookresearch/ImageBind.git
+laion-clap @ git+https://github.com/lematt1991/CLAP.git
+numpy
+perception-models @ git+https://github.com/facebookresearch/perception_models@unpin-deps
+pydub
+torch
+torchaudio
+torchcodec
+torchdiffeq
+torchvision
+transformers>=4.54.0
