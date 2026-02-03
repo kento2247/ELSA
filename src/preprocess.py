@@ -18,13 +18,13 @@ from pydantic import BaseModel, Field
 from sam_audio import SAMAudio, SAMAudioProcessor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from transformers import (AutoModelForCausalLM, AutoTokenizer, ClapModel,
-                          ClapProcessor)
+from transformers import AutoModelForCausalLM, AutoTokenizer, ClapModel, ClapProcessor
 
 # from AudioSep.models.audiosep import AudioSep as AudioSepModel #TODO fix
 # from AudioSep.utils import get_ss_model #TODO fix
 # from CLAPSep.model.CLAPSep import CLAPSep #TODO fix
 from dataset import TTADataset
+
 # from SoloAudio.solo_audio_ins import SoloAudio #TODO fix
 from utils.helper_func import fix_seed
 
@@ -1478,85 +1478,6 @@ def embed_parsed_data(
                     )
 
 
-def create_diff_audio(dataloader, feats_dir: str):
-    """Create difference audio by subtracting separated audio from original.
-
-    This function extracts residual sounds that are not captured in the
-    separated audio files by subtracting the merged separated audio from
-    the original audio.
-
-    Args:
-        dataloader: DataLoader for the dataset.
-        feats_dir: Directory containing features and separated audio.
-    """
-    for batch in tqdm(dataloader, desc="Parsing Audio with SAM-Audio"):
-        audio_files = batch["audio_file_path"]
-        text_ids = batch["text_id"]
-        datasets = batch["dataset"]
-
-        for text_id, dataset, audio_file in zip(text_ids, datasets, audio_files):
-            separated_audio_dir = os.path.join(
-                feats_dir, "separated_audio", dataset, text_id
-            )
-
-            # Skip if separated audio directory doesn't exist
-            if not os.path.exists(separated_audio_dir):
-                continue
-
-            separated_audio_files = sorted(
-                [
-                    os.path.join(separated_audio_dir, f)
-                    for f in os.listdir(separated_audio_dir)
-                    if f.endswith(".wav")
-                ]
-            )
-
-            # Skip if no separated audio files exist
-            if len(separated_audio_files) == 0:
-                continue
-
-            # Extract sounds not included in separated_audios
-            # Take the value of separated_audio with maximum amplitude at each time step and subtract it from original_audio
-            original_audio, orig_sr = torchaudio.load(audio_file)
-            separated_audios = []
-            for sep_audio_file in separated_audio_files:
-                audio, sep_sr = torchaudio.load(sep_audio_file)
-                separated_audios.append(audio)
-            separated_audios = torch.stack(separated_audios, dim=0)  # (N, C, T)
-
-            # Resample original audio to match separated audio sample rate
-            if orig_sr != sep_sr:
-                resampler = torchaudio.transforms.Resample(orig_sr, sep_sr)
-                original_audio = resampler(original_audio)
-
-            # Match lengths (truncate or pad to shorter length)
-            orig_len = original_audio.shape[-1]
-            sep_len = separated_audios.shape[-1]
-            min_len = min(orig_len, sep_len)
-            original_audio = original_audio[..., :min_len]
-            separated_audios = separated_audios[..., :min_len]
-
-            # Use the separated_audio value with maximum absolute value at each time step (waveform set)
-            # This prevents phase inversion when the same sound is extracted multiple times
-            abs_separated = torch.abs(separated_audios)  # (N, C, T)
-            max_abs_idx = abs_separated.argmax(dim=0)  # (C, T)
-            # Use gather to get the actual waveform values with maximum absolute value at each time step
-            merged_separated = torch.gather(
-                separated_audios, 0, max_abs_idx.unsqueeze(0)
-            ).squeeze(
-                0
-            )  # (C, T)
-
-            diff_audio = original_audio - merged_separated
-            diff_audio = torch.clamp(diff_audio, -1.0, 1.0)
-
-            # save diff audio
-            diff_audio_dir = os.path.join(feats_dir, "diff_audio", dataset)
-            os.makedirs(diff_audio_dir, exist_ok=True)
-            diff_audio_path = os.path.join(diff_audio_dir, f"{text_id}.wav")
-            torchaudio.save(diff_audio_path, diff_audio, sep_sr)
-
-
 def embed_quality_prompts(feats_dir: str, embedder: CLAPEmbedder):
     """Embed PAM-style quality prompts and contrast prompts, save to disk.
 
@@ -1619,55 +1540,51 @@ def main(args):
         embedder = MSClapEmbedder(seed=args.seed)
 
     # If only embedding quality prompts, do that and exit
-    if args.elsa:
-        embed_quality_prompts(args.feats_dir, embedder)
-        for split in args.splits:
-            dataset = TTAPreprocessDataset(
-                data_dir=args.data_dir,
-                split=split,
-                subjective_metrics=args.subjective_metrics,
-                dataset_names=args.dataset_names,
-            )
-            dataloader = DataLoader(dataset, batch_size=args.bs, shuffle=False)
+    embed_quality_prompts(args.feats_dir, embedder)
+    for split in args.splits:
+        dataset = TTAPreprocessDataset(
+            data_dir=args.data_dir,
+            split=split,
+            subjective_metrics=args.subjective_metrics,
+            dataset_names=args.dataset_names,
+        )
+        dataloader = DataLoader(dataset, batch_size=args.bs, shuffle=False)
 
-            clap_extract(dataloader, args.feats_dir, embedder=embedder)
-            clear_gpu_memory()
+        clap_extract(dataloader, args.feats_dir, embedder=embedder)
+        clear_gpu_memory()
 
-            if args.elsa:
-                if text_parser_model == "gemini":
-                    text_parser = GeminiTextParser()
-                elif text_parser_model == "gpt":
-                    text_parser = GPTTextParser()
-                elif text_parser_model == "qwen":
-                    text_parser = QwenTextParser()
+        if text_parser_model == "gemini":
+            text_parser = GeminiTextParser()
+        elif text_parser_model == "gpt":
+            text_parser = GPTTextParser()
+        elif text_parser_model == "qwen":
+            text_parser = QwenTextParser()
 
-                text_parse(dataloader, args.feats_dir, text_parser=text_parser)
-                del text_parser
-                clear_gpu_memory()
+        text_parse(dataloader, args.feats_dir, text_parser=text_parser)
+        del text_parser
+        clear_gpu_memory()
 
-                if audio_separator_model == "sam_audio":
-                    audio_separator = SAMAudioSeparator()
-                # elif audio_separator_model == "clapsep":
-                #     audio_separator = CLAPSepSeparator()
-                # elif audio_separator_model == "soloaudio":
-                #     audio_separator = SoloAudioSeparator()
-                # elif audio_separator_model == "audiosep":
-                #     audio_separator = AudioSepSeparator()
+        if audio_separator_model == "sam_audio":
+            audio_separator = SAMAudioSeparator()
+        # elif audio_separator_model == "clapsep":
+        #     audio_separator = CLAPSepSeparator()
+        # elif audio_separator_model == "soloaudio":
+        #     audio_separator = SoloAudioSeparator()
+        # elif audio_separator_model == "audiosep":
+        #     audio_separator = AudioSepSeparator()
 
-                audio_separate(
-                    dataloader, args.feats_dir, audio_separator, text_parser_model
-                )
-                del audio_separator
-                clear_gpu_memory()
+        audio_separate(dataloader, args.feats_dir, audio_separator, text_parser_model)
+        del audio_separator
+        clear_gpu_memory()
 
-                embed_parsed_data(
-                    dataloader,
-                    args.feats_dir,
-                    embedder,
-                    text_parser_model=text_parser_model,
-                    audio_separator_model=audio_separator_model,
-                )
-                clear_gpu_memory()
+        embed_parsed_data(
+            dataloader,
+            args.feats_dir,
+            embedder,
+            text_parser_model=text_parser_model,
+            audio_separator_model=audio_separator_model,
+        )
+        clear_gpu_memory()
 
 
 ### argument parser ###
@@ -1680,12 +1597,6 @@ def arg_parser():
         Parsed argument namespace.
     """
     parser = argparse.ArgumentParser(description="Audio Captioning Preprocessing")
-    parser.add_argument(
-        "--elsa",
-        type=bool,
-        default=True,
-        help="Enable ELSA-style preprocessing (text parsing and audio separation)",
-    )
     parser.add_argument(
         "--data_dir",
         type=str,
