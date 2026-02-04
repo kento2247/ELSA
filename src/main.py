@@ -157,7 +157,6 @@ class TTAEval:
         #     parsed_mask = self._maybe_to_device(
         #         batch.get(f"{self.clap_variant}_parsed_mask")
         #     )
-        #     metric_id = batch["subjective_metric_id"]
         #     scores = batch["score"].float()
 
         #     self.optimizer.zero_grad()
@@ -167,7 +166,6 @@ class TTAEval:
         #         clap_parsed_audio,
         #         clap_parsed_text,
         #         parsed_mask,
-        #         metric_id,
         #     ).squeeze(-1)
         #     loss = self.criterion(preds, scores)
         #     loss.backward()
@@ -203,7 +201,6 @@ class TTAEval:
                         parsed_audio_feats=batch[f"{self.clap_variant}_parsed_audio"],
                         parsed_text_feats=batch[f"{self.clap_variant}_parsed_text"],
                         parsed_mask=batch[f"{self.clap_variant}_parsed_mask"],
-                        metric_id=batch["subjective_metric_id"],
                     )
                     .squeeze(-1)
                     .cpu()
@@ -423,7 +420,6 @@ class TTAEval:
                                     parsed_audio,
                                     parsed_text,
                                     parsed_mask,
-                                    torch.zeros(2, dtype=torch.long).to(self.device),
                                 )
                                 .cpu()
                                 .numpy()

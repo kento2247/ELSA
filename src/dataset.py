@@ -54,26 +54,27 @@ class TTADataset(Dataset):
             "clotho",
             "compa",
         ],
-        split: Literal["train", "val", "test"] = "train",
+        split: Literal["train", "val", "test"] = "test",
+        clap_variant: str = "humanclap",
+        # Dataset loading parameters
         bitrate: int = 16000,
         max_len: int = 16000 * 10,
         dtype: torch.dtype = torch.float32,
         pre_load_features: bool = False,
         parsed_seq_size: int = 20,
-        clap_variant: str = "humanclap",
-        device: str = "cpu",
     ):
         """Initialize TTADataset with specified data directory and split."""
         self.data_dir = data_dir
         self.features_dir = features_dir
+        self.subjective_metrics = subjective_metrics
+        self.clap_variant = clap_variant
         self.bitrate = bitrate
         self.max_len = max_len
         self.dtype = dtype
         self.pre_load_features = pre_load_features
         self.parsed_seq_size = parsed_seq_size
-        self.subjective_metrics = subjective_metrics
-        self.clap_variant = clap_variant
-        self.device = device
+
+        self.device_name: str = "cuda" if torch.cuda.is_available() else "cpu"
         self.database = []
 
         # Load datasets
@@ -158,9 +159,6 @@ class TTADataset(Dataset):
                     "ref_audio_file_path": ref_audio_file_path,
                     "text": text,
                     "score": score,
-                    "subjective_metric_id": 0 if subjective_metric == "REL" else 1,
-                    "rev_text": "",  # Not used
-                    "rev_audio": "",  # Not used
                 }
             )
 
@@ -240,9 +238,6 @@ class TTADataset(Dataset):
                     "ref_audio_file_path": ref_audio_file_path,
                     "text": text,
                     "score": score,
-                    "subjective_metric_id": 0 if subjective_metric == "REL" else 1,
-                    "rev_text": "",  # Not used
-                    "rev_audio": "",  # Not used
                 }
             )
 
@@ -286,9 +281,6 @@ class TTADataset(Dataset):
                     ),
                     "text": text,
                     "score": score,
-                    "subjective_metric_id": 0 if subjective_metric == "REL" else 1,
-                    "rev_text": "",  # Not used
-                    "rev_audio": "",  # Not used
                 }
             )
 
@@ -332,9 +324,6 @@ class TTADataset(Dataset):
                     ),
                     "text": text,
                     "score": score,
-                    "subjective_metric_id": 0 if subjective_metric == "REL" else 1,
-                    "rev_text": "",  # Not used
-                    "rev_audio": "",  # Not used
                 }
             )
 
@@ -387,9 +376,6 @@ class TTADataset(Dataset):
                     "ref_audio_file_path": ref_audio_file_path,
                     "text": text,
                     "score": score,
-                    "subjective_metric_id": 0 if subjective_metric == "REL" else 1,
-                    "rev_text": "",  # Not used
-                    "rev_audio": "",  # Not used
                 }
             )
 
@@ -433,9 +419,6 @@ class TTADataset(Dataset):
                     ),
                     "text": text,
                     "score": score,
-                    "subjective_metric_id": 0 if subjective_metric == "REL" else 1,
-                    "rev_text": "",  # Not used
-                    "rev_audio": "",  # Not used
                 }
             )
 
@@ -496,9 +479,6 @@ class TTADataset(Dataset):
                     "ref_audio_file_path": ref_audio_file_path,
                     "text": text,
                     "score": score,
-                    "subjective_metric_id": 0 if subjective_metric == "REL" else 1,
-                    "rev_text": "",  # Not used
-                    "rev_audio": "",  # Not used
                 }
             )
 
@@ -556,7 +536,6 @@ class TTADataset(Dataset):
                     "ref_audio_file_path": "",  # Not used
                     "text": text_1,
                     "score": 0.0,  # Not used for classification
-                    "subjective_metric_id": 0,  # Not used
                     "rev_text": text_2,  # Incorrect choice
                     "rev_audio": audio_file_2,  # Incorrect choice
                 }
@@ -595,7 +574,6 @@ class TTADataset(Dataset):
                     "ref_audio_file_path": "",  # Not used
                     "text": text_1,
                     "score": 0.0,  # Not used for classification
-                    "subjective_metric_id": 0,  # Not used
                     "rev_text": text_2,  # Incorrect choice
                     "rev_audio": audio_file_2,  # Incorrect choice
                 }
@@ -626,7 +604,7 @@ class TTADataset(Dataset):
         feat_path = os.path.join(feats_dir, dataset_name, file_name)
         if not os.path.exists(feat_path):
             return torch.empty(0, dim)
-        feats = torch.load(feat_path, map_location=self.device)
+        feats = torch.load(feat_path, map_location=self.device_name)
         return feats.to(self.dtype)
 
     def _load_pre_extracted_mask(
@@ -637,7 +615,7 @@ class TTADataset(Dataset):
         feat_path = os.path.join(feats_dir, dataset_name, file_name)
         if not os.path.exists(feat_path):
             return torch.empty(0, dtype=torch.bool)
-        return torch.load(feat_path, map_location=self.device)
+        return torch.load(feat_path, map_location=self.device_name)
 
     def _load_quality_prompts(self):
         feats_dir = os.path.join(
@@ -652,9 +630,11 @@ class TTADataset(Dataset):
             and os.path.exists(low_path)
             and os.path.exists(unrelated_path)
         ):
-            self.high_emb = torch.load(high_path, map_location=self.device)
-            self.low_emb = torch.load(low_path, map_location=self.device)
-            self.unrelated_emb = torch.load(unrelated_path, map_location=self.device)
+            self.high_emb = torch.load(high_path, map_location=self.device_name)
+            self.low_emb = torch.load(low_path, map_location=self.device_name)
+            self.unrelated_emb = torch.load(
+                unrelated_path, map_location=self.device_name
+            )
         else:
             raise FileNotFoundError(f"Quality prompts not found at {feats_dir}. ")
 
@@ -813,7 +793,7 @@ class TTADataset(Dataset):
         pad_size = target_len - cur_len
         pad = torch.zeros(
             pad_size, feats.shape[1], dtype=feats.dtype, device=feats.device
-        )
+        ).to(feats.dtype)
         return torch.cat([feats, pad], dim=0)
 
     def _pad_or_truncate_mask(self, mask: torch.Tensor) -> torch.Tensor:
@@ -827,7 +807,7 @@ class TTADataset(Dataset):
         if cur_len > target_len:
             return mask[:target_len]
         pad_size = target_len - cur_len
-        pad = torch.zeros(pad_size, dtype=mask.dtype, device=mask.device)
+        pad = torch.zeros(pad_size, dtype=mask.dtype, device=mask.device).to(mask.dtype)
         return torch.cat([mask, pad], dim=0)
 
     def __len__(self):

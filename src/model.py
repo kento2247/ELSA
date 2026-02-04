@@ -188,7 +188,6 @@ class TTAEvalModel(nn.Module):
         parsed_audio_feats: torch.Tensor,
         parsed_text_feats: torch.Tensor,
         parsed_mask: torch.Tensor,
-        metric_id: torch.Tensor = None,
     ) -> torch.Tensor:
         rel_score = self._compute_relevance(
             audio_feats,
@@ -202,38 +201,4 @@ class TTAEvalModel(nn.Module):
             use_cogr_norm=self.rel_use_cogr_norm,
         )
 
-        if metric_id is None or self.quality_high_emb is None:
-            return rel_score
-
         return rel_score
-
-        ovl_rel_score = self._compute_relevance(
-            audio_feats,
-            text_feats,
-            parsed_audio_feats,
-            parsed_text_feats,
-            parsed_mask,
-            use_gaussian_calibration=self.ovl_use_gaussian_calibration,
-            use_adaptive_fusion=self.ovl_use_adaptive_fusion,
-            use_contrastive=self.ovl_use_contrastive,
-            use_cogr_norm=self.ovl_use_cogr_norm,
-        )
-
-        quality_score = self.compute_quality_score(
-            audio_feats, use_calibration=self.ovl_use_gaussian_calibration
-        )
-
-        is_ovl = (metric_id == 1).to(audio_feats.device)
-
-        if self.ovl_use_adaptive_fusion:
-            mask = parsed_mask.to(audio_feats.device)
-            confidence = self._confidence_weight(mask)
-            rel_weight = 0.5 + 0.1 * confidence
-            qual_weight = 1.0 - rel_weight
-        else:
-            rel_weight = 0.5
-            qual_weight = 0.5
-
-        ovl_score = rel_weight * ovl_rel_score + qual_weight * quality_score
-
-        return torch.where(is_ovl, ovl_score, rel_score)
