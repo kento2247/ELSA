@@ -1199,9 +1199,7 @@ def text_parse(dataloader, feats_dir: str, text_parser: TextParser):
                     f"{text_id + suffix}.json",
                 )
                 os.makedirs(os.path.dirname(save_path), exist_ok=True)
-                with open(save_path, "w") as f:
-                    json.dump(cache[text_str], f, ensure_ascii=False, indent=0)
-
+                json.dump(cache[text_str], open(save_path, "w"), ensure_ascii=False, indent=0)
 
 def audio_separate(
     dataloader,
