@@ -105,12 +105,37 @@ def main() -> int:
         y_positions = np.linspace(0.05, 0.95, len(labels)).tolist()
     node_y = y_positions + y_positions
     node_x = [0.1] * len(labels) + [0.9] * len(labels)
+    base_colors = [
+        (31, 119, 180),   # blue
+        (255, 127, 14),   # orange
+        (44, 160, 44),    # green
+        (214, 39, 40),    # red
+        (148, 103, 189),  # purple
+        (140, 86, 75),    # brown
+        (227, 119, 194),  # pink
+        (127, 127, 127),  # gray
+        (188, 189, 34),   # olive
+        (23, 190, 207),   # cyan
+    ]
+    node_colors = [
+        f"rgba({r},{g},{b},0.6)"
+        for (r, g, b) in (base_colors[i % len(base_colors)] for i in range(len(labels)))
+    ]
+    node_colors = node_colors + node_colors
+    link_colors = ["rgba(180,180,180,0.35)"] * len(values)
 
     fig = go.Figure(
         data=[
             go.Sankey(
-                node=dict(label=node_labels, pad=15, thickness=18, y=node_y, x=node_x),
-                link=dict(source=sources, target=targets, value=values),
+                node=dict(
+                    label=node_labels,
+                    pad=15,
+                    thickness=18,
+                    y=node_y,
+                    x=node_x,
+                    color=node_colors,
+                ),
+                link=dict(source=sources, target=targets, value=values, color=link_colors),
                 arrangement="fixed",
             )
         ]
