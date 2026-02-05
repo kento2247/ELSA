@@ -115,10 +115,7 @@ def main() -> int:
         ]
     )
 
-    fig.update_layout(
-        title=f"GT vs Pred (REL/audiocap) — {model_name}",
-        font_size=36,
-    )
+    fig.update_layout(font_size=36)
 
     fig.show()
 
