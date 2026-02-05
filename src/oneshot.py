@@ -3,15 +3,18 @@ from typing import Literal
 import torch
 
 from model import TTAEvalModel
-from preprocess import GPTTextParser, HumanCLAPEmbedder, SamAudio
+from preprocess import AudioSeparator  # Placeholder for unused import
+from preprocess import CLAPEmbedder  # Placeholder for unused import
+from preprocess import TextParser  # Placeholder for unused import
+from preprocess import GPTTextParser, HumanCLAPEmbedder, SAMAudioSeparator
 
 
 class OneShotTTAEvalModel(TTAEvalModel):
     def __init__(self):
         super().__init__()
-        self.embedder = HumanCLAPEmbedder()
-        self.text_parser = GPTTextParser()
-        self.audio_parser = SamAudio()
+        self.embedder: CLAPEmbedder = HumanCLAPEmbedder()
+        self.text_parser: TextParser = GPTTextParser()
+        self.audio_parser: AudioSeparator = SAMAudioSeparator()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.to(self.device)
 
@@ -51,14 +54,38 @@ class OneShotTTAEvalModel(TTAEvalModel):
 
 
 if __name__ == "__main__":
-    model = OneShotTTAEvalModel()
+    import argparse
     import time
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--audio_file_path",
+        type=str,
+        default="data/wav/tango/train/23.wav",
+        help="Path to the input audio file.",
+    )
+    parser.add_argument(
+        "--text",
+        type=str,
+        default="A dog barking and a car honking.",
+        help="Text description of the audio.",
+    )
+    parser.add_argument(
+        "--metric",
+        type=str,
+        default="REL",
+        choices=["REL", "OVL"],
+        help="Evaluation metric to use.",
+    )
+    args = parser.parse_args()
+
+    model = OneShotTTAEvalModel()
 
     start_time = time.time()
     score = model(
-        audio_file_path="data/wav/tango/train/23.wav",
-        text="A dog barking and a car honking.",
-        metric="REL",
+        audio_file_path=args.audio_file_path,
+        text=args.text,
+        metric=args.metric,
     )
     print("Predicted score:", score.item())
     end_time = time.time()
