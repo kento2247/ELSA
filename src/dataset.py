@@ -97,6 +97,9 @@ class TTADataset(Dataset):
             if "compa" in dataset_names:
                 self._load_compa_data(split, subjective_metric)
 
+        # # Load static features
+        # self._load_quality_prompts()
+
     def _load_relate_data(self, split: str, subjective_metric: str) -> None:
         """Load RELATE dataset and split into train, val, test sets."""
         max_score = 10.0
@@ -601,7 +604,7 @@ class TTADataset(Dataset):
         feats_dir = os.path.join(self.data_dir, self.features_dir, feats_name)
         feat_path = os.path.join(feats_dir, dataset_name, file_name)
         if not os.path.exists(feat_path):
-            return torch.empty(0, dim).to(self.device)
+            return torch.empty(0, dim, dtype=self.dtype).to(self.device)
         feats = torch.load(feat_path, map_location=self.device_name)
         return feats.to(self.dtype)
 
@@ -742,6 +745,11 @@ class TTADataset(Dataset):
             file_name=text_file_name,
         )
 
+        # # Static features
+        # data[f"{self.clap_variant}_high_quality_prompt"] = self.high_emb
+        # data[f"{self.clap_variant}_low_quality_prompt"] = self.low_emb
+        # data[f"{self.clap_variant}_unrelated_prompt"] = self.unrelated_emb
+
         # Parsed features
         data[f"{self.clap_variant}_parsed_audio"] = self._pad_or_truncate_feats(
             self._load_pre_extracted_feats(
@@ -786,7 +794,7 @@ class TTADataset(Dataset):
         pad_size = target_len - cur_len
         pad = torch.zeros(
             pad_size, feats.shape[1], dtype=feats.dtype, device=feats.device
-        ).to(feats.dtype)
+        )
         return torch.cat([feats, pad], dim=0)
 
     def _pad_or_truncate_mask(self, mask: torch.Tensor) -> torch.Tensor:
@@ -800,7 +808,7 @@ class TTADataset(Dataset):
         if cur_len > target_len:
             return mask[:target_len]
         pad_size = target_len - cur_len
-        pad = torch.zeros(pad_size, dtype=mask.dtype, device=mask.device).to(mask.dtype)
+        pad = torch.zeros(pad_size, dtype=mask.dtype, device=mask.device)
         return torch.cat([mask, pad], dim=0)
 
     def __len__(self):
