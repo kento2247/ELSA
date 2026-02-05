@@ -92,6 +92,7 @@ def main() -> int:
     tgt_labels = [f"Pred {l}" for l in labels]
     all_labels = src_labels + tgt_labels
     label_to_idx = {l: i for i, l in enumerate(all_labels)}
+    node_labels = labels + labels
 
     sources = flow["GT"].map(lambda l: label_to_idx[f"GT {l}"]).tolist()
     targets = flow["Pred"].map(lambda l: label_to_idx[f"Pred {l}"]).tolist()
@@ -108,14 +109,36 @@ def main() -> int:
     fig = go.Figure(
         data=[
             go.Sankey(
-                node=dict(label=all_labels, pad=15, thickness=18, y=node_y, x=node_x),
+                node=dict(label=node_labels, pad=15, thickness=18, y=node_y, x=node_x),
                 link=dict(source=sources, target=targets, value=values),
                 arrangement="fixed",
             )
         ]
     )
 
-    fig.update_layout(font_size=36)
+    fig.update_layout(
+        font_size=36,
+        annotations=[
+            dict(
+                text="GT",
+                x=0.1,
+                y=1.05,
+                xref="paper",
+                yref="paper",
+                showarrow=False,
+                font=dict(size=36),
+            ),
+            dict(
+                text="Pred",
+                x=0.9,
+                y=1.05,
+                xref="paper",
+                yref="paper",
+                showarrow=False,
+                font=dict(size=36),
+            ),
+        ],
+    )
 
     fig.show()
 
