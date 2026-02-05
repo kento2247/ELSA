@@ -75,6 +75,7 @@ class TTADataset(Dataset):
         self.parsed_seq_size = parsed_seq_size
 
         self.device_name: str = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = torch.device(self.device_name)
         self.database = []
 
         # Load datasets
@@ -95,9 +96,6 @@ class TTADataset(Dataset):
                 self._load_clotho_data(split, subjective_metric)
             if "compa" in dataset_names:
                 self._load_compa_data(split, subjective_metric)
-
-        # Load static features
-        self._load_quality_prompts()
 
     def _load_relate_data(self, split: str, subjective_metric: str) -> None:
         """Load RELATE dataset and split into train, val, test sets."""
@@ -603,7 +601,7 @@ class TTADataset(Dataset):
         feats_dir = os.path.join(self.data_dir, self.features_dir, feats_name)
         feat_path = os.path.join(feats_dir, dataset_name, file_name)
         if not os.path.exists(feat_path):
-            return torch.empty(0, dim)
+            return torch.empty(0, dim).to(self.device)
         feats = torch.load(feat_path, map_location=self.device_name)
         return feats.to(self.dtype)
 
@@ -614,7 +612,7 @@ class TTADataset(Dataset):
         feats_dir = os.path.join(self.data_dir, self.features_dir, feats_name)
         feat_path = os.path.join(feats_dir, dataset_name, file_name)
         if not os.path.exists(feat_path):
-            return torch.empty(0, dtype=torch.bool)
+            return torch.empty(0, dtype=torch.bool).to(self.device)
         return torch.load(feat_path, map_location=self.device_name)
 
     def _load_quality_prompts(self):
@@ -743,11 +741,6 @@ class TTADataset(Dataset):
             dataset_name=dataset_name,
             file_name=text_file_name,
         )
-
-        # Static features
-        data[f"{self.clap_variant}_high_quality_prompt"] = self.high_emb
-        data[f"{self.clap_variant}_low_quality_prompt"] = self.low_emb
-        data[f"{self.clap_variant}_unrelated_prompt"] = self.unrelated_emb
 
         # Parsed features
         data[f"{self.clap_variant}_parsed_audio"] = self._pad_or_truncate_feats(
