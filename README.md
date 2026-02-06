@@ -38,8 +38,8 @@ ELSA consists of three main components:
 
 ```bash
 # Clone the repository
-git clone git@github.com:kento2247/ELSA.git
-cd ELSA
+git clone git@github.com:kento2247/TTAEval.git
+cd TTAEval
 uv sync
 ```
 
