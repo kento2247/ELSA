@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Project Page](https://img.shields.io/badge/Project-Page-blue?style=flat-square)](https://elsa-h0jky.kinsta.page)
+[![Project Page](https://img.shields.io/badge/Project-Page-blue?style=flat-square)](https://elsa-projectpage.pages.dev)
 [![arXiv](https://img.shields.io/badge/arXiv-Coming%20Soon-b31b1b?style=flat-square)](https://arxiv.org)
 </div>
 
