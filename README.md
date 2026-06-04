@@ -1,10 +1,8 @@
 <div align="center">
   <img src="https://cdn.icmsaust.au/uploads/Interspeech2026_pos_alt_ddb5976556.png" alt="Interspeech 2026" width="260">
-  <br>
-  <strong>[Interspeech 2026]</strong>
 </div>
 
-# ELSA: Acoustic Event-Level Semantic Alignment for Fine-Grained Reference-Free Text-to-Audio Evaluation
+# [Interspeech 2026] ELSA: Acoustic Event-Level Semantic Alignment for Fine-Grained Reference-Free Text-to-Audio Evaluation
 
 <div align="center">
 
