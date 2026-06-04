@@ -1,10 +1,24 @@
-# ELSA: Event-Level Semantic Alignment for Audio
+<div align="center">
+  <img src="https://cdn.icmsaust.au/uploads/Interspeech2026_pos_alt_ddb5976556.png" alt="Interspeech 2026" width="260">
+  <br>
+  <strong>[Interspeech 2026]</strong>
+</div>
+
+# ELSA: Acoustic Event-Level Semantic Alignment for Fine-Grained Reference-Free Text-to-Audio Evaluation
 
 <div align="center">
 
+[![INTERSPEECH 2026](https://img.shields.io/badge/INTERSPEECH-2026-green?style=flat-square)](https://www.interspeech2026.org/)
 [![Project Page](https://img.shields.io/badge/Project-Page-blue?style=flat-square)](https://elsa-projectpage.pages.dev)
 [![arXiv](https://img.shields.io/badge/arXiv-Coming%20Soon-b31b1b?style=flat-square)](https://arxiv.org)
 </div>
+
+## Authors
+
+Shuntaro Suzuki<sup>1,*</sup>, Kento Tokura<sup>1,*</sup>, Daichi Yashima<sup>1,*</sup>, Kanon Amemiya<sup>1,*</sup>, Komei Sugiura<sup>1</sup>, Shinnosuke Takamichi<sup>1</sup>
+
+<sup>1</sup> Keio University  
+<sup>*</sup> Equal contribution.
 
 <img src="assets/ELSA.png" alt="ELSA Architecture Overview" width="100%">
 
@@ -86,8 +100,13 @@ Arguments:
 
 ## Citation
 
-```
-Under Review
+```bibtex
+@inproceedings{suzuki2026elsa,
+  title = {ELSA: Acoustic Event-Level Semantic Alignment for Fine-Grained Reference-Free Text-to-Audio Evaluation},
+  author = {Shuntaro Suzuki and Kento Tokura and Daichi Yashima and Kanon Amemiya and Komei Sugiura and Shinnosuke Takamichi},
+  year = {2026},
+  booktitle = {The 27th Interspeech Conference (INTERSPEECH 2026)},
+}
 ```
 
 ---
