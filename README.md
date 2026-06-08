@@ -2,13 +2,14 @@
 
 <img src="assets/ELSA.png" alt="ELSA Architecture Overview" width="100%">
 
-**INTERSPEECH 2026 Paper**
+---
 
 
-Shuntaro Suzuki<sup>1,*</sup>, Kento Tokura<sup>1,*</sup>, Daichi Yashima<sup>1,*</sup>, Kanon Amemiya<sup>1,*</sup>, Komei Sugiura<sup>1</sup>, Shinnosuke Takamichi<sup>1</sup>
+Shuntaro Suzuki<sup>1,\*</sup>, Kento Tokura<sup>1,\*</sup>, Daichi Yashima<sup>1,\*</sup>, Kanon Amemiya<sup>1,\*</sup>, Komei Sugiura<sup>1</sup>, Shinnosuke Takamichi<sup>1</sup>
 
-<sup>1</sup> Keio University  
-<sup>*</sup> Equal contribution.
+<sup>1</sup> Keio University  <sup>*</sup> Equal contribution.
+
+**Interspeech 2026**
 
 [![INTERSPEECH 2026](https://img.shields.io/badge/INTERSPEECH-2026-green?style=flat-square)](https://www.interspeech2026.org/)
 [![Project Page](https://img.shields.io/badge/Project-Page-blue?style=flat-square)](https://elsa-projectpage.pages.dev)
@@ -16,16 +17,12 @@ Shuntaro Suzuki<sup>1,*</sup>, Kento Tokura<sup>1,*</sup>, Daichi Yashima<sup>1,
 
 </div>
 
-## About This Project
+## 💡 About
 
-ELSA is a novel framework for fine-grained, reference-free evaluation of text-to-audio generation models. By decomposing audio into semantic events and aligning them with textual descriptions at the event level, ELSA provides more accurate and interpretable evaluation metrics for audio generation quality.
+This repository provides the implementation of **ELSA**, as presented in our paper: "ELSA: Acoustic Event-Level Semantic Alignment for
+Fine-Grained Reference-Free Text-to-Audio Evaluation". It includes code, dataset preparation instructions, and scripts for evaluation.
 
-**Key Features:**
-- **Event-Level Alignment**: Breaks down audio into semantic events for precise alignment with text descriptions
-- **Reference-Free Evaluation**: Eliminates the need for reference audio, enabling evaluation of diverse audio generation
-- **Fine-Grained Analysis**: Provides detailed insights into which aspects of the generated audio match the text prompt
-
-## Architecture
+## ⚙️ Architecture
 
 <img src="assets/model.png" alt="ELSA Model Architecture" width="100%">
 
@@ -35,7 +32,7 @@ ELSA consists of three main components:
 2. **Text Encoder**: Processes and encodes the input text descriptions
 3. **Semantic Alignment Module**: Aligns audio events with text semantics to compute evaluation scores
 
-## Environment Installation + Pretrained Model Download
+## ⚒️ Getting Started
 
 ### Prerequisites
 - [uv](https://docs.astral.sh/uv/getting-started/installation/)
@@ -62,21 +59,7 @@ This will download:
 - SAM-Audio model for audio segmentation
 - CLAP embeddings for semantic understanding
 
-## Data Download
-
-```bash
-# Download evaluation datasets
-sh scripts/download_data.sh
-```
-
-Available datasets include:
-- AudioCaps
-- MusicCap
-- Other benchmark datasets
-
-For detailed information about dataset structure, refer to the data directory documentation.
-
-## One-shot Evaluation (src/oneshot.py)
+## 🎯 One-shot Evaluation
 
 Run a single audio/text pair through the evaluation model:
 
@@ -92,7 +75,12 @@ Arguments:
 - `--text`: Text description of the audio.
 - `--metric`: Evaluation metric, `REL` or `OVL` (default: `REL`).
 
-## Citation
+## 🙌 Acknowledgment
+We gratefully acknowledge the following GitHub repositories for providing valuable code and resources that contributed to this work:
+- AudioBERTScore (https://github.com/lourson1091/audiobertscore)
+- SAM-Audio (https://github.com/facebookresearch/sam-audio)
+
+## 📄 Citation
 
 ```bibtex
 @inproceedings{suzuki2026elsa,
