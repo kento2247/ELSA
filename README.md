@@ -26,13 +26,12 @@ Fine-Grained Reference-Free Text-to-Audio Evaluation". It includes code, dataset
 
 <img src="assets/model.png" alt="ELSA Model Architecture" width="100%">
 
-ELSA consists of three main components:
+ELSA consists of two main components:
 
-1. **Audio Event Encoder**: Extracts semantic events from generated audio using advanced audio understanding models
-2. **Text Encoder**: Processes and encodes the input text descriptions
-3. **Semantic Alignment Module**: Aligns audio events with text semantics to compute evaluation scores
+1. **Event-Aware Audio Representation Extractor**: Retrieves event-relevant audio segments via a language-queried audio source separation model and encodes them in a shared text–audio embedding space.
+2. **Hierarchical Semantic Alignment Module**: Integrates global text–audio similarity and event-level matching to compute the final evaluation score.
 
-## ⚒️ Getting Started
+## 🚀 Getting Started
 
 ### Prerequisites
 - [uv](https://docs.astral.sh/uv/getting-started/installation/)
