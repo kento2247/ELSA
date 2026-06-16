@@ -1,0 +1,93 @@
+<div align="center">
+
+<img src="assets/ELSA.png" alt="ELSA Architecture Overview" width="100%">
+
+---
+
+
+Shuntaro Suzuki<sup>1,\*</sup>, Kento Tokura<sup>1,\*</sup>, Daichi Yashima<sup>1,\*</sup>, Kanon Amemiya<sup>1,\*</sup>, Komei Sugiura<sup>1</sup>, Shinnosuke Takamichi<sup>1</sup>
+
+<sup>1</sup> Keio University  <sup>*</sup> Equal contribution.
+
+**Interspeech 2026**
+
+[![INTERSPEECH 2026](https://img.shields.io/badge/INTERSPEECH-2026-green?style=flat-square)](https://www.interspeech2026.org/)
+[![Project Page](https://img.shields.io/badge/Project-Page-blue?style=flat-square)](https://elsa-projectpage.pages.dev)
+[![arXiv](https://img.shields.io/badge/arXiv-Coming%20Soon-b31b1b?style=flat-square)](https://arxiv.org)
+
+</div>
+
+## 💡 About
+
+This repository provides the implementation of **ELSA**, as presented in our paper: "ELSA: Acoustic Event-Level Semantic Alignment for
+Fine-Grained Reference-Free Text-to-Audio Evaluation". It includes code, dataset preparation instructions, and scripts for evaluation.
+
+## ⚙️ Architecture
+
+<img src="assets/model.png" alt="ELSA Model Architecture" width="100%">
+
+ELSA consists of two main components:
+
+1. **Event-Aware Audio Representation Extractor**: Retrieves event-relevant audio segments via a language-queried audio source separation model and encodes them in a shared text–audio embedding space.
+2. **Hierarchical Semantic Alignment Module**: Integrates global text–audio similarity and event-level matching to compute the final evaluation score.
+
+## 🚀 Getting Started
+
+### Prerequisites
+- [uv](https://docs.astral.sh/uv/getting-started/installation/)
+- CUDA 11.8+ (for GPU acceleration)
+- 12GB+ VRAM (20GB+ recommended for some features)
+
+### Installation
+
+```bash
+# Clone the repository
+git clone git@github.com:kento2247/TTAEval.git
+cd TTAEval
+uv sync
+```
+
+### Download Pretrained Models
+
+```bash
+# Download pretrained models
+sh scripts/download_model.sh
+```
+
+This will download:
+- SAM-Audio model for audio segmentation
+- CLAP embeddings for semantic understanding
+
+## 🎯 One-shot Evaluation
+
+Run a single audio/text pair through the evaluation model:
+
+```bash
+python src/oneshot.py \
+  --audio_file_path data/wav/tango/train/23.wav \
+  --text "A dog barking and a car honking." \
+  --metric REL
+```
+
+Arguments:
+- `--audio_file_path`: Path to the input audio file.
+- `--text`: Text description of the audio.
+- `--metric`: Evaluation metric, `REL` or `OVL` (default: `REL`).
+
+## 🙌 Acknowledgment
+We gratefully acknowledge the following GitHub repositories for providing valuable code and resources that contributed to this work:
+- AudioBERTScore (https://github.com/lourson1091/audiobertscore)
+- SAM-Audio (https://github.com/facebookresearch/sam-audio)
+
+## 📄 Citation
+
+```bibtex
+@inproceedings{suzuki2026elsa,
+  title = {ELSA: Acoustic Event-Level Semantic Alignment for Fine-Grained Reference-Free Text-to-Audio Evaluation},
+  author = {Shuntaro Suzuki and Kento Tokura and Daichi Yashima and Kanon Amemiya and Komei Sugiura and Shinnosuke Takamichi},
+  year = {2026},
+  booktitle = {Interspeech 2026},
+}
+```
+
+---
