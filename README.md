@@ -13,7 +13,7 @@ Shuntaro Suzuki<sup>1,\*</sup>, Kento Tokura<sup>1,\*</sup>, Daichi Yashima<sup>
 
 [![INTERSPEECH 2026](https://img.shields.io/badge/INTERSPEECH-2026-green?style=flat-square)](https://www.interspeech2026.org/)
 [![Project Page](https://img.shields.io/badge/Project-Page-blue?style=flat-square)](https://elsa-projectpage.pages.dev)
-[![arXiv](https://img.shields.io/badge/arXiv-Coming%20Soon-b31b1b?style=flat-square)](https://arxiv.org)
+[![arXiv](https://img.shields.io/badge/arXiv-Coming%20Soon-b31b1b?style=flat-square)](https://arxiv.org/abs/2606.17404)
 
 </div>
 
