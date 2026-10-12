@@ -59,7 +59,7 @@ uv run hf auth login
 To evaluate a single audio–text pair with ELSA, run:
 
 ```bash
-python src/oneshot.py \
+uv run src/oneshot.py \
   --audio_file_path /path/to/your/audio.wav \
   --text "A dog barking and a car honking."
 ```
