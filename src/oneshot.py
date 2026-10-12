@@ -1,6 +1,10 @@
-from typing import Literal
+# ruff: noqa: E402
 
 import torch
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
 
 from model import TTAEvalModel
 from preprocess import AudioSeparator  # Placeholder for unused import
@@ -22,7 +26,6 @@ class OneShotTTAEvalModel(TTAEvalModel):
         self,
         audio_file_path: str,
         text: str,
-        metric: Literal["REL", "OVL"] = "REL",
     ) -> torch.Tensor:
         audio_feature: torch.Tensor = self.embedder.embed_audios(
             [audio_file_path]
@@ -48,7 +51,6 @@ class OneShotTTAEvalModel(TTAEvalModel):
             separated_audios_features.unsqueeze(0),  # [1, num_events, D]
             acoustic_events_features.unsqueeze(0),  # [1, num_events, D]
             mask,  # [1, num_events]
-            (torch.tensor(1.0 if metric == "OVL" else 0.0).to(self.device)),  # [1]
         )  # [1]
         return score.squeeze(0)  # []
 
@@ -57,7 +59,7 @@ if __name__ == "__main__":
     import argparse
     import time
 
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Evaluate an audio-text pair with ELSA.")
     parser.add_argument(
         "--audio_file_path",
         type=str,
@@ -70,23 +72,47 @@ if __name__ == "__main__":
         default="A dog barking and a car honking.",
         help="Text description of the audio.",
     )
-    parser.add_argument(
-        "--metric",
-        type=str,
-        default="REL",
-        choices=["REL", "OVL"],
-        help="Evaluation metric to use.",
-    )
     args = parser.parse_args()
 
-    model = OneShotTTAEvalModel()
-
-    start_time = time.time()
-    score = model(
-        audio_file_path=args.audio_file_path,
-        text=args.text,
-        metric=args.metric,
+    console = Console()
+    console.print(
+        Panel.fit(
+            "[bold cyan]Fine-grained audio-text alignment[/bold cyan]",
+            title="[bold]ELSA[/bold]",
+            border_style="cyan",
+        )
     )
-    print("Predicted score:", score.item())
-    end_time = time.time()
-    print("Inference time:", (end_time - start_time) * 1000, "msec")
+
+    inputs = Table.grid(padding=(0, 2))
+    inputs.add_column(style="bold cyan", no_wrap=True)
+    inputs.add_column()
+    inputs.add_row("Audio", Text(args.audio_file_path))
+    inputs.add_row("Text", Text(args.text))
+    console.print(Panel(inputs, title="Input", border_style="dim"))
+
+    with console.status("[bold cyan]Loading models...", spinner="dots"):
+        model = OneShotTTAEvalModel()
+
+    inference_start = time.perf_counter()
+    with console.status("[bold cyan]Evaluating alignment...", spinner="dots"):
+        score = model(
+            audio_file_path=args.audio_file_path,
+            text=args.text,
+        )
+    inference_seconds = time.perf_counter() - inference_start
+
+    result = Table.grid(padding=(0, 2))
+    result.add_column(style="bold", no_wrap=True)
+    result.add_column(justify="right")
+    result.add_row(
+        "ELSA score",
+        Text(f"{score.item():.4f}", style="bold bright_green"),
+    )
+    result.add_row("Inference", f"{inference_seconds:.2f} s")
+    console.print(
+        Panel(
+            result,
+            title="[bold green]Evaluation complete[/bold green]",
+            border_style="green",
+        )
+    )

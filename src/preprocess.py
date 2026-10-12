@@ -6,13 +6,11 @@ import time
 from abc import ABC
 from typing import List
 
-import laion_clap
 import librosa
 import torch
 import torchaudio
 from google import genai
 from google.genai.types import GenerateContentConfig
-from msclap import CLAP
 from openai import OpenAI
 from pydantic import BaseModel, Field
 from sam_audio import SAMAudio, SAMAudioProcessor
@@ -211,6 +209,8 @@ class MSClapEmbedder(CLAPEmbedder):
             dtype: Data type for embeddings.
             seed: Random seed for reproducibility.
         """
+        from msclap import CLAP
+
         super().__init__(name="msclap")
         self.model = CLAP(version="2023", use_cuda=True)
         self.max_text_len = 77  # MSCLAP max text length
@@ -259,6 +259,8 @@ class LaionClapEmbedder(CLAPEmbedder):
         Args:
             dtype: Data type for embeddings.
         """
+        import laion_clap
+
         super().__init__(name="laionclap")
         self.model = laion_clap.CLAP_Module(enable_fusion=False)
         self.model.load_ckpt("models/630k-audioset-best.pt")

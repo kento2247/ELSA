@@ -47,32 +47,27 @@ cd TTAEval
 uv sync
 ```
 
-### Download Pretrained Models
-
-```bash
-# Download pretrained models
-sh scripts/download_model.sh
-```
-
-This will download:
-- SAM-Audio model for audio segmentation
-- CLAP embeddings for semantic understanding
-
 ## 🎯 One-shot Evaluation
 
-Run a single audio/text pair through the evaluation model:
+ELSA uses the OpenAI API for text parsing and SAM-Audio for language-queried source separation. Before running an evaluation, sign in to Hugging Face and request access to [`facebook/sam-audio-large-tv`](https://huggingface.co/facebook/sam-audio-large-tv). Once access is granted, set your OpenAI API key and authenticate with Hugging Face:
+
+```bash
+export OPENAI_API_KEY="your-api-key"
+uv run hf auth login
+```
+
+To evaluate a single audio–text pair with ELSA, run:
 
 ```bash
 python src/oneshot.py \
-  --audio_file_path data/wav/tango/train/23.wav \
-  --text "A dog barking and a car honking." \
-  --metric REL
+  --audio_file_path /path/to/your/audio.wav \
+  --text "A dog barking and a car honking."
 ```
 
 Arguments:
+
 - `--audio_file_path`: Path to the input audio file.
 - `--text`: Text description of the audio.
-- `--metric`: Evaluation metric, `REL` or `OVL` (default: `REL`).
 
 ## 🙌 Acknowledgment
 We gratefully acknowledge the following GitHub repositories for providing valuable code and resources that contributed to this work:

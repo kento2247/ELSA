@@ -354,6 +354,11 @@ class SAMAudio(BaseModel):
                 "(^text_encoder|^visual_ranker|^text_ranker|^span_predictor)"
             )
             missing_keys = [x for x in missing_keys if not re.search(skip_regex, x)]
+            # This fork does not instantiate the checkpoint's vision encoder.
+            # Its weights are therefore expected to be unused.
+            unexpected_keys = [
+                x for x in unexpected_keys if not x.startswith("vision_encoder.")
+            ]
             if len(missing_keys) > 0 or len(unexpected_keys) > 0:
                 print(
                     f"Missing keys: {missing_keys}, unexpected_keys: {unexpected_keys}"
