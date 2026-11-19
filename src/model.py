@@ -10,7 +10,7 @@ class TTAEvalModel(nn.Module):
         rel_use_gaussian_calibration: bool = False,
         rel_use_adaptive_fusion: bool = True,
         rel_use_contrastive: bool = False,
-        rel_use_cogr_norm: bool = True,
+        rel_use_cogr_norm: bool = False,
         ovl_use_gaussian_calibration: bool = False,
         ovl_use_adaptive_fusion: bool = False,
         ovl_use_contrastive: bool = True,
