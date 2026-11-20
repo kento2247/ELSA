@@ -213,7 +213,9 @@ class MSClapEmbedder(CLAPEmbedder):
 
         super().__init__(name="msclap")
         self.model = CLAP(version="2023", use_cuda=True)
-        self.max_text_len = 77  # MSCLAP max text length
+        # reserve tokens for the appended " <|endoftext|>"
+        eos_len = len(self.model.tokenizer.encode(" <|endoftext|>"))
+        self.max_text_tokens = self.model.args.text_len - eos_len
         self.dtype = dtype
         self.seed = seed
 
@@ -226,7 +228,11 @@ class MSClapEmbedder(CLAPEmbedder):
         Returns:
             Text embeddings tensor of shape [B, D].
         """
-        truncated_texts = [t[: self.max_text_len] for t in texts]
+        tokenizer = self.model.tokenizer
+        truncated_texts = [
+            tokenizer.decode(tokenizer.encode(t)[: self.max_text_tokens])
+            for t in texts
+        ]
         with torch.no_grad():
             text_embeddings = self.model.get_text_embeddings(truncated_texts)
         return text_embeddings.to(self.dtype)
@@ -265,11 +271,10 @@ class LaionClapEmbedder(CLAPEmbedder):
         self.model = laion_clap.CLAP_Module(enable_fusion=False)
         self.model.load_ckpt("models/630k-audioset-best.pt")
         self.model.eval()
-        self.max_text_len = 77  # LaionCLAP max text length
         self.dtype = dtype
 
     def embed_texts(self, texts: list[str]) -> torch.Tensor:
-        """Embed texts in batch with truncation for long texts.
+        """Embed texts in batch (truncated to 77 tokens internally).
 
         Args:
             texts: List of text strings to embed.
@@ -277,11 +282,8 @@ class LaionClapEmbedder(CLAPEmbedder):
         Returns:
             Text embeddings tensor of shape [B, D].
         """
-        truncated_texts = [t[: self.max_text_len] for t in texts]
         with torch.no_grad():
-            text_embeddings = self.model.get_text_embedding(
-                truncated_texts, use_tensor=True
-            )
+            text_embeddings = self.model.get_text_embedding(texts, use_tensor=True)
         return text_embeddings.to(self.dtype)
 
     def embed_audios(self, audio_files: list[str] | list[torch.Tensor]) -> torch.Tensor:
